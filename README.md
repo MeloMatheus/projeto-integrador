@@ -310,3 +310,8 @@ Resultado esperado: uma aplicação web integrada para operação da loja de cup
 <br/>
 
 ![alt text](<assets-doc/diagrama de sequencia.svg>)
+
+<br/>
+
+## IHC
+
