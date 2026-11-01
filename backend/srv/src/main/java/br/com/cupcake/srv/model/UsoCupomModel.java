@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "uso_cupom", uniqueConstraints = @UniqueConstraint(name = "uk_uso_cupom_pedido", columnNames = "id_pedido"))
+@Table(name = "uso_cupom", uniqueConstraints = @UniqueConstraint(name = "uq_uso_cupom_pedido", columnNames = "id_pedido"))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -35,7 +35,7 @@ public class UsoCupomModel {
     private CupomModel cupom;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "id_pedido", nullable = false, unique = true)
+    @JoinColumn(name = "id_pedido", nullable = false)
     private PedidoModel pedido;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

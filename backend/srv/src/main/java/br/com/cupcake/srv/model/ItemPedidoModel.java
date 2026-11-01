@@ -36,11 +36,11 @@ public class ItemPedidoModel {
     private ProdutoModel produto;
 
     @Column(nullable = false)
-    private Integer quantidade;
+    private Long quantidade;
 
     @Column(name = "preco_unitario", nullable = false, precision = 10, scale = 2)
     private BigDecimal precoUnitario;
 
-    @Column(nullable = false, precision = 10, scale = 2)
-    private BigDecimal subtotal;
+    @Column(name = "nome_produto_snapshot", nullable = false, length = 120)
+    private String nomeProdutoSnapshot;
 }

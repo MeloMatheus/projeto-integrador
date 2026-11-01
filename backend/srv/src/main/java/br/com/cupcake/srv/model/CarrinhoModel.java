@@ -28,7 +28,7 @@ import java.util.List;
 @Getter
 @Setter
 @NoArgsConstructor
-public class CarrinhoModel extends AuditoriaModel {
+public class CarrinhoModel {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id_carrinho", nullable = false, updatable = false)
@@ -40,7 +40,7 @@ public class CarrinhoModel extends AuditoriaModel {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private StatusCarrinho status = StatusCarrinho.ABERTO;
+    private StatusCarrinho status = StatusCarrinho.ATIVO;
 
     @Column(name = "criado_em", nullable = false, updatable = false)
     private LocalDateTime criadoEm;

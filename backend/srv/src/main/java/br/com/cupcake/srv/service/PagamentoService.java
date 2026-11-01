@@ -46,6 +46,20 @@ public class PagamentoService {
         PedidoModel pedido = pedidoService.findPedido(email, false, pedidoId);
         pedido = pedidoRepository.findByIdForUpdate(pedidoId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido não encontrado."));
+        String method = request.metodo().trim().toUpperCase(Locale.ROOT);
+        if (!List.of("PIX", "CARTAO", "BOLETO").contains(method)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Método de pagamento não suportado.");
+        }
+        String idempotencyKey = request.chaveIdempotencia().trim();
+        PagamentoModel existingWithKey = pagamentoRepository.findByChaveIdempotencia(idempotencyKey)
+                .orElse(null);
+        if (existingWithKey != null) {
+            if (existingWithKey.getPedido().getId().equals(pedidoId)
+                    && existingWithKey.getMetodo().equals(method)) {
+                return PagamentoResponse.from(existingWithKey);
+            }
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A chave de idempotência já foi usada.");
+        }
         if (!pedido.getStatusPedido().getNome().equals("PENDENTE_PAGAMENTO")) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "O pedido não está aguardando pagamento.");
         }
@@ -53,15 +67,12 @@ public class PagamentoService {
         if (existing.stream().anyMatch(payment -> payment.getStatusPagamento().getNome().equals("PENDENTE"))) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe uma tentativa de pagamento pendente.");
         }
-        String method = request.metodo().trim().toUpperCase(Locale.ROOT);
-        if (!List.of("PIX", "CARTAO", "BOLETO").contains(method)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Método de pagamento não suportado.");
-        }
         PagamentoModel payment = new PagamentoModel();
         payment.setPedido(pedido);
         payment.setStatusPagamento(statusByName("PENDENTE"));
         payment.setMetodo(method);
         payment.setValor(pedido.getValorTotal());
+        payment.setChaveIdempotencia(idempotencyKey);
         return PagamentoResponse.from(pagamentoRepository.save(payment));
     }
 

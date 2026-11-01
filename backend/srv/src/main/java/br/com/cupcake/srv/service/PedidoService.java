@@ -2,6 +2,7 @@ package br.com.cupcake.srv.service;
 
 import br.com.cupcake.srv.model.CarrinhoModel;
 import br.com.cupcake.srv.model.CupomModel;
+import br.com.cupcake.srv.model.EnderecoModel;
 import br.com.cupcake.srv.model.HistoricoStatusPedidoModel;
 import br.com.cupcake.srv.model.ItemCarrinhoModel;
 import br.com.cupcake.srv.model.ItemPedidoModel;
@@ -54,6 +55,7 @@ public class PedidoService {
     private final UsoCupomRepository usoCupomRepository;
     private final UsuarioService usuarioService;
     private final ProdutoService produtoService;
+    private final EnderecoService enderecoService;
 
     public PedidoService(
             PedidoRepository pedidoRepository,
@@ -67,7 +69,8 @@ public class PedidoService {
             CupomRepository cupomRepository,
             UsoCupomRepository usoCupomRepository,
             UsuarioService usuarioService,
-            ProdutoService produtoService
+            ProdutoService produtoService,
+            EnderecoService enderecoService
     ) {
         this.pedidoRepository = pedidoRepository;
         this.statusRepository = statusRepository;
@@ -81,13 +84,15 @@ public class PedidoService {
         this.usoCupomRepository = usoCupomRepository;
         this.usuarioService = usuarioService;
         this.produtoService = produtoService;
+        this.enderecoService = enderecoService;
     }
 
     @Transactional
     public PedidoResponse criar(String email, CriarPedidoRequest request) {
         UsuarioModel usuario = usuarioService.buscarAtivoPorEmail(email);
+        EnderecoModel endereco = enderecoService.buscarDoUsuario(request.idEndereco(), usuario.getId());
         List<CarrinhoModel> openCarts = carrinhoRepository.findOpenByUsuarioIdForUpdate(
-                usuario.getId(), StatusCarrinho.ABERTO
+                usuario.getId(), StatusCarrinho.ATIVO
         );
         if (openCarts.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "O usuário não possui um carrinho aberto.");
@@ -124,7 +129,17 @@ public class PedidoService {
         pedido.setNumeroPedido("CP-" + UUID.randomUUID().toString().replace("-", "").substring(0, 20).toUpperCase());
         pedido.setSubtotal(subtotal);
         pedido.setValorDesconto(desconto);
+        pedido.setValorFrete(BigDecimal.ZERO.setScale(2));
         pedido.setValorTotal(total);
+        pedido.setDestinatario(endereco.getDestinatario());
+        pedido.setCepEntrega(endereco.getCep());
+        pedido.setLogradouroEntrega(endereco.getLogradouro());
+        pedido.setNumeroEntrega(endereco.getNumero());
+        pedido.setComplementoEntrega(endereco.getComplemento());
+        pedido.setBairroEntrega(endereco.getBairro());
+        pedido.setCidadeEntrega(endereco.getCidade());
+        pedido.setUfEntrega(endereco.getUf());
+        pedido.setReferenciaEntrega(endereco.getReferencia());
         pedido = pedidoRepository.save(pedido);
 
         for (ItemCarrinhoModel cartItem : cartItems) {
@@ -132,10 +147,9 @@ public class PedidoService {
             ItemPedidoModel itemPedido = new ItemPedidoModel();
             itemPedido.setPedido(pedido);
             itemPedido.setProduto(cartItem.getProduto());
+            itemPedido.setNomeProdutoSnapshot(cartItem.getProduto().getNome());
             itemPedido.setQuantidade(cartItem.getQuantidade());
             itemPedido.setPrecoUnitario(unitPrice);
-            itemPedido.setSubtotal(unitPrice.multiply(BigDecimal.valueOf(cartItem.getQuantidade()))
-                    .setScale(2, RoundingMode.HALF_UP));
             itemPedidoRepository.save(itemPedido);
         }
 

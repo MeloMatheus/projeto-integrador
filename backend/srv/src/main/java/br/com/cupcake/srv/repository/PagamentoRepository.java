@@ -16,6 +16,8 @@ public interface PagamentoRepository extends JpaRepository<PagamentoModel, UUID>
 
     Optional<PagamentoModel> findByTransacaoExterna(String transacaoExterna);
 
+    Optional<PagamentoModel> findByChaveIdempotencia(String chaveIdempotencia);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from PagamentoModel p where p.id = :id")
     Optional<PagamentoModel> findByIdForUpdate(@Param("id") UUID id);

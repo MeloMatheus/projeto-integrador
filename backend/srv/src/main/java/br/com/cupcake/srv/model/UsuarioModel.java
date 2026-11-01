@@ -24,7 +24,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-public class UsuarioModel extends AuditoriaModel {
+public class UsuarioModel {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -44,7 +44,7 @@ public class UsuarioModel extends AuditoriaModel {
     @Column(name = "senha_hash", nullable = false, length = 255)
     private String password;
 
-    @Column(length = 30)
+    @Column(length = 25)
     private String telefone;
 
     @Column(nullable = false)

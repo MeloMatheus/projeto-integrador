@@ -8,7 +8,7 @@ import java.util.UUID;
 public record ItemCarrinhoResponse(
         UUID idProduto,
         String nomeProduto,
-        Integer quantidade,
+        Long quantidade,
         BigDecimal precoUnitario,
         BigDecimal subtotal
 ) {

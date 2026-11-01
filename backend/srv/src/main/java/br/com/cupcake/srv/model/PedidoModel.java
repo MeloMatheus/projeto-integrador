@@ -14,6 +14,8 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -26,7 +28,7 @@ import java.util.List;
 @Getter
 @Setter
 @NoArgsConstructor
-public class PedidoModel extends AuditoriaModel {
+public class PedidoModel {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id_pedido", nullable = false, updatable = false)
@@ -54,6 +56,37 @@ public class PedidoModel extends AuditoriaModel {
 
     @Column(name = "valor_total", nullable = false, precision = 10, scale = 2)
     private BigDecimal valorTotal;
+
+    @Column(name = "valor_frete", nullable = false, precision = 10, scale = 2)
+    private BigDecimal valorFrete = BigDecimal.ZERO;
+
+    @Column(nullable = false, length = 120)
+    private String destinatario;
+
+    @Column(name = "cep_entrega", nullable = false, length = 10)
+    private String cepEntrega;
+
+    @Column(name = "logradouro_entrega", nullable = false, length = 150)
+    private String logradouroEntrega;
+
+    @Column(name = "numero_entrega", nullable = false, length = 20)
+    private String numeroEntrega;
+
+    @Column(name = "complemento_entrega", length = 100)
+    private String complementoEntrega;
+
+    @Column(name = "bairro_entrega", nullable = false, length = 100)
+    private String bairroEntrega;
+
+    @Column(name = "cidade_entrega", nullable = false, length = 100)
+    private String cidadeEntrega;
+
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "uf_entrega", nullable = false, columnDefinition = "char(2)")
+    private String ufEntrega;
+
+    @Column(name = "referencia_entrega", length = 200)
+    private String referenciaEntrega;
 
     @OneToMany(mappedBy = "pedido", fetch = FetchType.LAZY)
     private List<ItemPedidoModel> itens = new ArrayList<>();

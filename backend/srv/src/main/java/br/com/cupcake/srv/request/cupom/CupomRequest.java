@@ -2,6 +2,7 @@ package br.com.cupcake.srv.request.cupom;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -17,7 +18,7 @@ public record CupomRequest(
         @NotNull @DecimalMin(value = "0.00", inclusive = false) @Digits(integer = 8, fraction = 2) BigDecimal valorDesconto,
         @NotNull LocalDateTime dataInicio,
         @NotNull LocalDateTime dataFim,
-        @Positive Integer limiteUtilizacoes,
+        @Positive @Max(4294967295L) Long limiteUtilizacoes,
         @NotNull @DecimalMin("0.00") @Digits(integer = 8, fraction = 2) BigDecimal valorMinimoPedido,
         @NotNull Boolean ativo
 ) {

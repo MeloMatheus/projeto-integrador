@@ -58,19 +58,18 @@ class CommerceIntegrationTests {
     void seedLookupData() {
         ensureProfile("CLIENTE");
         PerfilModel adminProfile = ensureProfile("ADMIN");
-        ensureOrderStatus(1, "PENDENTE_PAGAMENTO");
-        ensureOrderStatus(2, "PAGO");
-        ensureOrderStatus(3, "EM_PREPARACAO");
-        ensureOrderStatus(4, "ENVIADO");
-        ensureOrderStatus(5, "CONCLUIDO");
-        ensureOrderStatus(6, "CANCELADO");
-        ensurePaymentStatus(1, "PENDENTE");
-        ensurePaymentStatus(2, "APROVADO");
-        ensurePaymentStatus(3, "RECUSADO");
-        ensurePaymentStatus(4, "CANCELADO");
+        ensureOrderStatus("PENDENTE_PAGAMENTO", (short) 1);
+        ensureOrderStatus("PAGO", (short) 2);
+        ensureOrderStatus("EM_PREPARACAO", (short) 3);
+        ensureOrderStatus("ENVIADO", (short) 4);
+        ensureOrderStatus("CONCLUIDO", (short) 5);
+        ensureOrderStatus("CANCELADO", (short) 6);
+        ensurePaymentStatus("PENDENTE");
+        ensurePaymentStatus("APROVADO");
+        ensurePaymentStatus("RECUSADO");
+        ensurePaymentStatus("CANCELADO");
         if (tipoDescontoRepository.findByNome("PERCENTUAL").isEmpty()) {
             TipoDescontoModel type = new TipoDescontoModel();
-            type.setId(1);
             type.setNome("PERCENTUAL");
             tipoDescontoRepository.save(type);
         }
@@ -112,6 +111,24 @@ class CommerceIntegrationTests {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.subtotal").value(25.0));
 
+        MvcResult addressResult = mockMvc.perform(post("/api/enderecos")
+                        .header("Authorization", "Bearer " + clientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "identificacao", "Casa",
+                                "destinatario", "Cliente",
+                                "cep", "01000-000",
+                                "logradouro", "Rua de teste",
+                                "numero", "123",
+                                "bairro", "Centro",
+                                "cidade", "São Paulo",
+                                "uf", "sp",
+                                "principal", true
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String addressId = json(addressResult).get("idEndereco").asText();
+
         mockMvc.perform(post("/api/admin/cupons")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -130,26 +147,44 @@ class CommerceIntegrationTests {
         MvcResult orderResult = mockMvc.perform(post("/api/pedidos")
                         .header("Authorization", "Bearer " + clientToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"codigoCupom\":\"doce10\"}"))
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "idEndereco", addressId,
+                                "codigoCupom", "doce10"
+                        ))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.subtotal").value(25.0))
                 .andExpect(jsonPath("$.valorDesconto").value(2.5))
                 .andExpect(jsonPath("$.valorTotal").value(22.5))
+                .andExpect(jsonPath("$.destinatario").value("Cliente"))
+                .andExpect(jsonPath("$.ufEntrega").value("SP"))
+                .andExpect(jsonPath("$.itens[0].nomeProduto").value("Cupcake de teste"))
+                .andExpect(jsonPath("$.itens[0].subtotal").value(25.0))
                 .andExpect(jsonPath("$.status").value("PENDENTE_PAGAMENTO"))
                 .andExpect(jsonPath("$.historico.length()").value(1))
                 .andReturn();
         JsonNode order = json(orderResult);
         String orderId = order.get("idPedido").asText();
 
+        String idempotencyKey = "payment-" + UUID.randomUUID();
+        String paymentRequest = objectMapper.writeValueAsString(java.util.Map.of(
+                "metodo", "PIX",
+                "chaveIdempotencia", idempotencyKey
+        ));
         MvcResult paymentResult = mockMvc.perform(post("/api/pedidos/{id}/pagamentos", orderId)
                         .header("Authorization", "Bearer " + clientToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"metodo\":\"PIX\"}"))
+                        .content(paymentRequest))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("PENDENTE"))
                 .andExpect(jsonPath("$.valor").value(22.5))
                 .andReturn();
         String paymentId = json(paymentResult).get("idPagamento").asText();
+        mockMvc.perform(post("/api/pedidos/{id}/pagamentos", orderId)
+                        .header("Authorization", "Bearer " + clientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(paymentRequest))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.idPagamento").value(paymentId));
 
         String confirmation = "{\"resultado\":\"APROVADO\",\"transacaoExterna\":\"tx-"
                 + UUID.randomUUID() + "\"}";
@@ -195,19 +230,18 @@ class CommerceIntegrationTests {
         });
     }
 
-    private void ensureOrderStatus(int id, String name) {
+    private void ensureOrderStatus(String name, short order) {
         if (statusPedidoRepository.findByNome(name).isEmpty()) {
             StatusPedidoModel status = new StatusPedidoModel();
-            status.setId(id);
             status.setNome(name);
+            status.setOrdem(order);
             statusPedidoRepository.save(status);
         }
     }
 
-    private void ensurePaymentStatus(int id, String name) {
+    private void ensurePaymentStatus(String name) {
         if (statusPagamentoRepository.findByNome(name).isEmpty()) {
             StatusPagamentoModel status = new StatusPagamentoModel();
-            status.setId(id);
             status.setNome(name);
             statusPagamentoRepository.save(status);
         }

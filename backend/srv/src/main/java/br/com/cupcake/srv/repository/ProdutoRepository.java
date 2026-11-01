@@ -9,11 +9,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ProdutoRepository extends JpaRepository<ProdutoModel, UUID> {
-    Page<ProdutoModel> findByAtivoTrueAndDisponivelTrue(Pageable pageable);
+    Page<ProdutoModel> findByDisponivelTrue(Pageable pageable);
 
-    Page<ProdutoModel> findByAtivoTrueAndDisponivelTrueAndNomeContainingIgnoreCase(String nome, Pageable pageable);
+    Page<ProdutoModel> findByDisponivelTrueAndNomeContainingIgnoreCase(String nome, Pageable pageable);
 
-    Optional<ProdutoModel> findByIdAndAtivoTrue(UUID id);
+    Optional<ProdutoModel> findById(UUID id);
 
-    long countByAtivoTrue();
+    long countByDisponivelTrue();
 }

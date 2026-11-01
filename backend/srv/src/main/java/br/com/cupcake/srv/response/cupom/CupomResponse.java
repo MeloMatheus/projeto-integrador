@@ -14,7 +14,7 @@ public record CupomResponse(
         BigDecimal valorDesconto,
         LocalDateTime dataInicio,
         LocalDateTime dataFim,
-        Integer limiteUtilizacoes,
+        Long limiteUtilizacoes,
         BigDecimal valorMinimoPedido,
         boolean ativo
 ) {

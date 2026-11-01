@@ -29,6 +29,9 @@ public class PerfilModel {
     @Column(nullable = false, unique = true, length = 30)
     private String nome;
 
+    @Column(length = 150)
+    private String descricao;
+
     @OneToMany(mappedBy = "perfil", fetch = jakarta.persistence.FetchType.LAZY)
     private List<UsuarioModel> usuarios = new ArrayList<>();
 }

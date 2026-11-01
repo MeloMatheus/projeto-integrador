@@ -11,7 +11,7 @@ public record UsuarioRequest(
         @NotBlank @Email String email,
         @Size(min = 8, max = 72)
         String password,
-        String telefone,
+        @Size(max = 25) String telefone,
         Boolean ativo,
         UUID idPerfil
 ) {

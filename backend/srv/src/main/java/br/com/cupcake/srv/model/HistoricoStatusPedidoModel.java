@@ -22,7 +22,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-public class HistoricoStatusPedidoModel extends AuditoriaModel {
+public class HistoricoStatusPedidoModel {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id_historico", nullable = false, updatable = false)

@@ -55,7 +55,7 @@ public class CarrinhoService {
                     created.setProduto(produto);
                     return created;
                 });
-        item.setQuantidade(request.quantidade());
+        item.setQuantidade(request.quantidade().longValue());
         item.setPrecoUnitario(produto.getPreco());
         itemRepository.save(item);
         return response(carrinho);
@@ -73,16 +73,16 @@ public class CarrinhoService {
 
     private CarrinhoModel getOrCreate(UsuarioModel usuario) {
         List<CarrinhoModel> openCarts = carrinhoRepository.findOpenByUsuarioIdForUpdate(
-                usuario.getId(), StatusCarrinho.ABERTO
+                usuario.getId(), StatusCarrinho.ATIVO
         );
         if (!openCarts.isEmpty()) {
             return openCarts.getFirst();
         }
-        return carrinhoRepository.findFirstByUsuarioIdAndStatusOrderByCriadoEmDesc(usuario.getId(), StatusCarrinho.ABERTO)
+        return carrinhoRepository.findFirstByUsuarioIdAndStatusOrderByCriadoEmDesc(usuario.getId(), StatusCarrinho.ATIVO)
                 .orElseGet(() -> {
                     CarrinhoModel carrinho = new CarrinhoModel();
                     carrinho.setUsuario(usuario);
-                    carrinho.setStatus(StatusCarrinho.ABERTO);
+                    carrinho.setStatus(StatusCarrinho.ATIVO);
                     return carrinhoRepository.save(carrinho);
                 });
     }

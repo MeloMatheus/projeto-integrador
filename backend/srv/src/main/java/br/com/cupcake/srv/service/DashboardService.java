@@ -35,7 +35,7 @@ public class DashboardService {
     public DashboardResponse carregar() {
         return new DashboardResponse(
                 usuarioRepository.countByAtivoTrue(),
-                produtoRepository.countByAtivoTrue(),
+                produtoRepository.countByDisponivelTrue(),
                 cupomRepository.countByAtivoTrue(),
                 pedidoRepository.countByStatusPedidoNome("PENDENTE_PAGAMENTO"),
                 pedidoRepository.count(),

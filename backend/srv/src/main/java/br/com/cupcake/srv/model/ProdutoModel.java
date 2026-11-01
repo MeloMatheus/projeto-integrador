@@ -20,7 +20,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-public class ProdutoModel extends AuditoriaModel {
+public class ProdutoModel {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id_produto", nullable = false, updatable = false)
@@ -41,14 +41,20 @@ public class ProdutoModel extends AuditoriaModel {
     @Column(nullable = false)
     private Boolean disponivel = true;
 
-    @Column(nullable = false)
-    private Boolean ativo = true;
-
     @Column(name = "criado_em", nullable = false, updatable = false)
     private LocalDateTime criadoEm;
+
+    @Column(name = "atualizado_em", nullable = false)
+    private LocalDateTime atualizadoEm;
 
     @PrePersist
     void prePersist() {
         criadoEm = LocalDateTime.now();
+        atualizadoEm = criadoEm;
+    }
+
+    @jakarta.persistence.PreUpdate
+    void preUpdate() {
+        atualizadoEm = LocalDateTime.now();
     }
 }

@@ -23,7 +23,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-public class PagamentoModel extends AuditoriaModel {
+public class PagamentoModel {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id_pagamento", nullable = false, updatable = false)
@@ -52,8 +52,20 @@ public class PagamentoModel extends AuditoriaModel {
     @Column(name = "data_confirmacao")
     private LocalDateTime dataConfirmacao;
 
+    @Column(name = "chave_idempotencia", nullable = false, unique = true, length = 100)
+    private String chaveIdempotencia;
+
+    @Column(name = "atualizado_em", nullable = false)
+    private LocalDateTime atualizadoEm;
+
     @PrePersist
     void prePersist() {
         dataCriacao = LocalDateTime.now();
+        atualizadoEm = dataCriacao;
+    }
+
+    @jakarta.persistence.PreUpdate
+    void preUpdate() {
+        atualizadoEm = LocalDateTime.now();
     }
 }

@@ -25,14 +25,14 @@ public class ProdutoService {
     @Transactional(readOnly = true)
     public Page<ProdutoResponse> listar(String nome, Pageable pageable) {
         Page<ProdutoModel> produtos = nome == null || nome.isBlank()
-                ? produtoRepository.findByAtivoTrueAndDisponivelTrue(pageable)
-                : produtoRepository.findByAtivoTrueAndDisponivelTrueAndNomeContainingIgnoreCase(nome.trim(), pageable);
+                ? produtoRepository.findByDisponivelTrue(pageable)
+                : produtoRepository.findByDisponivelTrueAndNomeContainingIgnoreCase(nome.trim(), pageable);
         return produtos.map(ProdutoResponse::from);
     }
 
     @Transactional(readOnly = true)
     public ProdutoResponse buscar(UUID id) {
-        return produtoRepository.findByIdAndAtivoTrue(id)
+        return produtoRepository.findById(id)
                 .filter(ProdutoModel::getDisponivel)
                 .map(ProdutoResponse::from)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado."));
@@ -42,13 +42,12 @@ public class ProdutoService {
     public ProdutoResponse criar(ProdutoRequest request) {
         ProdutoModel produto = new ProdutoModel();
         apply(request, produto);
-        produto.setAtivo(true);
         return ProdutoResponse.from(produtoRepository.save(produto));
     }
 
     @Transactional
     public ProdutoResponse atualizar(UUID id, ProdutoRequest request) {
-        ProdutoModel produto = produtoRepository.findByIdAndAtivoTrue(id)
+        ProdutoModel produto = produtoRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado."));
         apply(request, produto);
         return ProdutoResponse.from(produto);
@@ -56,15 +55,14 @@ public class ProdutoService {
 
     @Transactional
     public void excluir(UUID id) {
-        ProdutoModel produto = produtoRepository.findByIdAndAtivoTrue(id)
+        ProdutoModel produto = produtoRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não encontrado."));
-        produto.setAtivo(false);
         produto.setDisponivel(false);
     }
 
     @Transactional(readOnly = true)
     public ProdutoModel buscarDisponivel(UUID id) {
-        return produtoRepository.findByIdAndAtivoTrue(id)
+        return produtoRepository.findById(id)
                 .filter(ProdutoModel::getDisponivel)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Produto indisponível."));
     }

@@ -8,17 +8,17 @@ import java.util.UUID;
 public record ItemPedidoResponse(
         UUID idProduto,
         String nomeProduto,
-        Integer quantidade,
+        Long quantidade,
         BigDecimal precoUnitario,
         BigDecimal subtotal
 ) {
     public static ItemPedidoResponse from(ItemPedidoModel item) {
         return new ItemPedidoResponse(
                 item.getProduto().getId(),
-                item.getProduto().getNome(),
+                item.getNomeProdutoSnapshot(),
                 item.getQuantidade(),
                 item.getPrecoUnitario(),
-                item.getSubtotal()
+                item.getPrecoUnitario().multiply(BigDecimal.valueOf(item.getQuantidade()))
         );
     }
 }

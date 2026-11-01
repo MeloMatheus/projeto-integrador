@@ -1,6 +1,6 @@
 # Cupcake API
 
-API REST em Java 21 e Spring Boot 3.5.7 com PostgreSQL, Spring Security, JWT e migrações Flyway.
+API REST em Java 21 e Spring Boot 3.5.7 com PostgreSQL, Spring Security e JWT.
 
 ## Execução local
 
@@ -18,15 +18,22 @@ API REST em Java 21 e Spring Boot 3.5.7 com PostgreSQL, Spring Security, JWT e m
    docker compose up --build
    ```
 
-   A API fica disponível em `http://localhost:8080`; a documentação interativa em `/swagger-ui.html`. Flyway cria o esquema e os perfis `ADMIN` e `CLIENTE`, além dos status e tipos de desconto.
+   A API fica disponível em `http://localhost:8081`; a documentação interativa em `/swagger-ui.html`. Em uma instalação nova, o PostgreSQL executa `src/main/resources/db/schema.sql` ao criar o volume, inicializando o esquema e os dados de referência.
 
-Para executar sem Docker, configure `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET` e `JWT_EXPIRATION`, então rode:
+O arquivo `.env` é lido pelo Docker Compose, não por uma execução direta da aplicação ou pela IDE. Para executar sem Docker, crie o banco e execute `src/main/resources/db/schema.sql` nele antes de iniciar a aplicação. Configure `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET` e `JWT_EXPIRATION` no ambiente do processo. No PowerShell, gere e defina uma chave apenas para a sessão atual e inicie a API no mesmo terminal:
 
 ```powershell
+$bytes = [byte[]]::new(32)
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+$env:JWT_SECRET = [Convert]::ToBase64String($bytes)
 .\mvnw.cmd spring-boot:run
 ```
 
-As migrações são aplicadas no início da aplicação e o Hibernate valida o esquema. `JWT_SECRET` é obrigatório; o token é assinado com HS256 e expira após `JWT_EXPIRATION` segundos. Tokens emitidos não são revogados automaticamente por logout.
+Ao iniciar pela IDE, configure `JWT_SECRET` nas variáveis de ambiente da configuração de execução usando uma chave Base64 aleatória que decodifique para pelo menos 32 bytes. Não use a chave de exemplo em produção nem a versione no repositório.
+
+O Hibernate valida o esquema existente ao iniciar; a aplicação não cria nem atualiza tabelas automaticamente. `JWT_SECRET` é obrigatório; o token é assinado com HS256 e expira após `JWT_EXPIRATION` segundos. Tokens emitidos não são revogados automaticamente por logout.
+
+Se a inicialização falhar ao determinar o dialeto, confirme que PostgreSQL está em execução, que o banco indicado por `DB_URL` existe e que `DB_USERNAME`/`DB_PASSWORD` estão corretos. O dialeto PostgreSQL é configurado explicitamente; isso não elimina a necessidade de uma conexão JDBC funcional nem da criação prévia do esquema.
 
 Para provisionar o primeiro administrador, preencha `INITIAL_ADMIN_EMAIL` e `INITIAL_ADMIN_PASSWORD` no `.env` (senha de pelo menos 12 caracteres) antes do primeiro início. O usuário é criado apenas se o e-mail ainda não existir; a configuração não promove nem altera contas existentes. Remova a senha do ambiente após o provisionamento.
 
@@ -43,16 +50,18 @@ Registro público sempre cria `CLIENTE`. Autentique com `POST /api/auth/login` u
 
 ```http
 GET /api/produtos?page=0&size=10&sort=nome,asc
+POST /api/enderecos
+{"identificacao":"Casa","destinatario":"Cliente","cep":"01000-000","logradouro":"Rua Exemplo","numero":"10","bairro":"Centro","cidade":"São Paulo","uf":"SP","principal":true}
 POST /api/carrinho/itens
 {"idProduto":"UUID_DO_PRODUTO","quantidade":2}
 POST /api/pedidos
-{"codigoCupom":"DOCE10"}
+{"idEndereco":"UUID_DO_ENDERECO","codigoCupom":"DOCE10"}
 POST /api/pedidos/UUID_DO_PEDIDO/pagamentos
-{"metodo":"PIX"}
+{"metodo":"PIX","chaveIdempotencia":"CHAVE_UNICA_DA_TENTATIVA"}
 GET /api/pedidos
 ```
 
-O cliente autenticado só acessa seu carrinho, pedidos e pagamentos. O carrinho usa o preço atual do produto quando o item é adicionado/atualizado e o checkout recalcula e registra o preço vigente no pedido. Pedidos cujo total seja zero após desconto são finalizados como pagos sem criar uma tentativa de cobrança. Produtos e cupons são gerenciados por `ADMIN`; as alterações de status ficam restritas a rotas administrativas e geram histórico.
+O cliente autenticado só acessa seus endereços, carrinho, pedidos e pagamentos. O checkout exige um endereço previamente salvo e copia seus dados para o pedido; o frete permanece zerado até haver uma regra de cálculo. A chave de idempotência da tentativa de pagamento permite que o cliente repita a requisição sem criar outra cobrança. O carrinho usa o preço atual do produto quando o item é adicionado/atualizado e o checkout recalcula e registra o preço e nome vigentes no pedido. Pedidos cujo total seja zero após desconto são finalizados como pagos sem criar uma tentativa de cobrança. Produtos e cupons são gerenciados por `ADMIN`; as alterações de status ficam restritas a rotas administrativas e geram histórico.
 
 Cupons são criados por um administrador em `POST /api/admin/cupons`; por exemplo, envie `{"codigo":"DOCE10","tipoDesconto":"PERCENTUAL","valorDesconto":10,"dataInicio":"2026-01-01T00:00:00","dataFim":"2027-01-01T00:00:00","valorMinimoPedido":0,"ativo":true}`. Para alterar o status do pedido, use `PUT /api/pedidos/admin/UUID_DO_PEDIDO/status` com `{"status":"EM_PREPARACAO","observacao":"Produção iniciada"}`. A confirmação demonstrativa do pagamento usa `POST /api/admin/pagamentos/UUID_DO_PAGAMENTO/confirmacao` com `{"resultado":"APROVADO","transacaoExterna":"ref-do-operador"}`.
 
@@ -68,4 +77,4 @@ O registro público não aceita atribuição de perfil; não existe promoção d
 .\mvnw.cmd test
 ```
 
-Os testes usam H2 em memória. O perfil de produção/local utiliza PostgreSQL e Flyway.
+Os testes usam H2 em memória. O perfil de produção/local utiliza PostgreSQL e exige que o esquema já tenha sido criado.

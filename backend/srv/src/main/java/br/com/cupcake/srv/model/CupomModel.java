@@ -28,7 +28,7 @@ import java.util.List;
 @Getter
 @Setter
 @NoArgsConstructor
-public class CupomModel extends AuditoriaModel {
+public class CupomModel {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id_cupom", nullable = false, updatable = false)
@@ -54,7 +54,7 @@ public class CupomModel extends AuditoriaModel {
     private LocalDateTime dataFim;
 
     @Column(name = "limite_utilizacoes")
-    private Integer limiteUtilizacoes;
+    private Long limiteUtilizacoes;
 
     @Column(name = "valor_minimo_pedido", nullable = false, precision = 10, scale = 2)
     private BigDecimal valorMinimoPedido = BigDecimal.ZERO;
@@ -62,12 +62,29 @@ public class CupomModel extends AuditoriaModel {
     @Column(nullable = false)
     private Boolean ativo = true;
 
+    @Column(name = "criado_em", nullable = false, updatable = false)
+    private LocalDateTime criadoEm;
+
+    @Column(name = "atualizado_em", nullable = false)
+    private LocalDateTime atualizadoEm;
+
     @OneToMany(mappedBy = "cupom", fetch = FetchType.LAZY)
     private List<UsoCupomModel> usos = new ArrayList<>();
 
     @PrePersist
+    void prePersist() {
+        normalizeCode();
+        criadoEm = LocalDateTime.now();
+        atualizadoEm = criadoEm;
+    }
+
     @PreUpdate
-    void normalizeCode() {
+    void preUpdate() {
+        normalizeCode();
+        atualizadoEm = LocalDateTime.now();
+    }
+
+    private void normalizeCode() {
         codigo = codigo.trim().toUpperCase(Locale.ROOT);
     }
 }
