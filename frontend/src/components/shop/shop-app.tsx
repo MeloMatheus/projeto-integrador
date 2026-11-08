@@ -38,7 +38,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { AdminDashboard } from "@/components/admin/admin-dashboard";
-import { DEMO_ADMIN_CREDENTIALS, DEMO_CUSTOMER_CREDENTIALS, useShop } from "@/lib/shop-store";
+import { useShop } from "@/lib/shop-store";
 import {
   calculateDelivery,
   categories,
@@ -47,7 +47,6 @@ import {
   formatPhone,
   isValidEmail,
   productImage,
-  products,
   type Address,
   type PaymentMethod,
   type Product,
@@ -137,18 +136,20 @@ export function ShopApp({ route, orderId = "" }: { route: ShopRoute; orderId?: s
   useEffect(() => {
     if (!ready) return;
     const isGuestPage = route === "login" || route === "register" || route === "forgot";
-    if (!currentUser && !isGuestPage) router.replace("/login");
-    if (currentUser && isGuestPage) router.replace(currentUser.role === "ADMIN" ? "/admin" : "/");
-    if (currentUser?.role === "ADMIN" && route !== "admin" && !isGuestPage) router.replace("/admin");
-    if (currentUser?.role === "CUSTOMER" && route === "admin") router.replace("/");
+    const authenticated = Boolean(currentUser?.token);
+    if (!authenticated && !isGuestPage) router.replace("/login");
+    if (authenticated && isGuestPage) router.replace(currentUser?.role === "ADMIN" ? "/admin" : "/");
+    if (authenticated && currentUser?.role === "ADMIN" && route !== "admin") router.replace("/admin");
+    if (authenticated && currentUser?.role === "CUSTOMER" && route === "admin") router.replace("/");
   }, [currentUser, ready, route, router]);
 
-  if (!ready || ((!currentUser && !["login", "register", "forgot"].includes(route)) || (currentUser && ["login", "register", "forgot"].includes(route)))) {
+  const isGuestPage = ["login", "register", "forgot"].includes(route);
+  if (!ready || ((!currentUser?.token && !isGuestPage) || (currentUser?.token && isGuestPage))) {
     return <LoadingScreen />;
   }
   if (
-    (currentUser?.role === "ADMIN" && route !== "admin") ||
-    (currentUser?.role === "CUSTOMER" && route === "admin")
+    (currentUser?.token && currentUser.role === "ADMIN" && route !== "admin") ||
+    (currentUser?.token && currentUser.role === "CUSTOMER" && route === "admin")
   ) {
     return <LoadingScreen />;
   }
@@ -286,13 +287,9 @@ function AuthPage({
         <div className="auth-form-wrap">
           <span className="auth-mark"><CakeSlice size={22} /></span>
           <span className="eyebrow">{isRegister ? "SUA HISTÓRIA COMEÇA AQUI" : isForgot ? "VAMOS RESOLVER ISSO" : "QUE BOM TER VOCÊ AQUI"}</span>
-          <h2>{isRegister ? "Crie sua conta" : isForgot ? "Nova senha, novo começo" : "Entre na sua conta"}</h2>
-          <p className="auth-subtitle">{isRegister ? "Cadastre-se para pedir suas pequenas felicidades." : isForgot ? "Recupere o acesso à sua conta Doce Miolo." : "Acesse seus pedidos e continue escolhendo delícias."}</p>
-          {isForgot && <div className="demo-note">Demonstração local: informe o e-mail cadastrado e defina uma nova senha.</div>}
-          {!isRegister && !isForgot && <>
-            <div className="demo-credentials-note"><b>Acesso de cliente demonstrativo</b><span>{DEMO_CUSTOMER_CREDENTIALS.email}</span><span>{DEMO_CUSTOMER_CREDENTIALS.password}</span><small>Entre para testar a loja, o carrinho e os pedidos.</small></div>
-            <div className="demo-credentials-note"><b>Acesso administrativo demonstrativo</b><span>{DEMO_ADMIN_CREDENTIALS.email}</span><span>{DEMO_ADMIN_CREDENTIALS.password}</span><small>O dashboard usa dados de exemplo enquanto a API está em desenvolvimento.</small></div>
-          </>}
+          <h2>{isRegister ? "Crie sua conta" : isForgot ? "Recuperação de senha" : "Entre na sua conta"}</h2>
+          <p className="auth-subtitle">{isRegister ? "Cadastre-se para pedir suas pequenas felicidades." : isForgot ? "Recuperação de senha indisponível no momento." : "Acesse seus pedidos e continue escolhendo delícias."}</p>
+          {isForgot ? <div className="demo-note">A API ainda não oferece recuperação de senha. Volte mais tarde ou entre em contato com a loja.</div> : <>
           {storageError && <Message>{storageError}</Message>}
           <form className="auth-form" onSubmit={submit}>
             {isRegister && <FormField label="Nome completo" name="name"><Input id="name" autoComplete="name" placeholder="Como podemos te chamar?" value={fields.name} onChange={(event) => setFields({ ...fields, name: event.target.value })} required /></FormField>}
@@ -305,6 +302,7 @@ function AuthPage({
             {success && <Message kind="success">{success}</Message>}
             <Button type="submit" className="button-primary auth-submit" disabled={busy}>{busy ? "Só um instante..." : isRegister ? "Criar minha conta" : isForgot ? "Salvar nova senha" : "Entrar na minha conta"}<ArrowRight size={17} /></Button>
           </form>
+          </>}
           <p className="auth-switch">{isRegister ? "Já tem uma conta?" : isForgot ? "Lembrou da senha?" : "Ainda não tem uma conta?"} <Link href={isRegister || isForgot ? "/login" : "/cadastro"}>{isRegister || isForgot ? "Entrar" : "Cadastre-se"}</Link></p>
           <div className="auth-trust"><span><Check size={14} /> Ingredientes de verdade</span><span><Heart size={14} /> Amor em cada receita</span></div>
         </div>
@@ -332,7 +330,7 @@ function passwordInput(
 }
 
 function Storefront({ notify }: { notify: (message: string, kind?: "success" | "error") => void }) {
-  const { addToCart, currentUser } = useShop();
+  const { addToCart, currentUser, products, catalogLoading, catalogError, refreshCatalog } = useShop();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("Todos");
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -350,7 +348,7 @@ function Storefront({ notify }: { notify: (message: string, kind?: "success" | "
   const filtered = useMemo(() => products.filter((product) => (
     (category === "Todos" || product.category === category) &&
     `${product.name} ${product.description}`.toLowerCase().includes(search.toLowerCase().trim())
-  )), [category, search]);
+  )), [category, products, search]);
 
   return (
     <>
@@ -373,12 +371,14 @@ function Storefront({ notify }: { notify: (message: string, kind?: "success" | "
       </section>
 
       <section id="catalogo" className="catalog-section">
-        <div className="section-heading"><div><span className="eyebrow">ESCOLHIDOS A DEDO</span><h2>Um miolo de felicidade</h2><p>Pequenos no tamanho, gigantes no sabor.</p></div><span className="catalog-count"><CakeSlice size={16} /> {products.length} delícias</span></div>
+        <div className="section-heading"><div><span className="eyebrow">ESCOLHIDOS A DEDO</span><h2>Um miolo de felicidade</h2><p>Pequenos no tamanho, gigantes no sabor.</p></div><span className="catalog-count"><CakeSlice size={16} /> {products.filter((product) => product.available).length} disponíveis</span></div>
         <div className="catalog-tools">
           <div className="search-box"><Search size={18} /><Input ref={searchRef} aria-label="Buscar cupcakes" placeholder="Qual sabor combina com hoje?" value={search} onChange={(event) => setSearch(event.target.value)} /><kbd>Ctrl K</kbd></div>
           <div className="category-list" aria-label="Filtrar por categoria">{categories.map((item) => <button key={item} className={`category-chip ${category === item ? "active" : ""}`} onClick={() => setCategory(item)} aria-pressed={category === item}>{item}</button>)}</div>
         </div>
-        {filtered.length ? <div className="product-grid">{filtered.map((product, index) => (
+        {catalogLoading ? <p className="catalog-status" role="status">Carregando os produtos disponíveis...</p>
+          : catalogError ? <div className="empty-search" role="alert"><h3>Não foi possível carregar o cardápio</h3><p>{catalogError}</p><Button variant="outline" onClick={() => void refreshCatalog()}>Tentar novamente</Button></div>
+            : filtered.length ? <div className="product-grid">{filtered.map((product, index) => (
           <ProductCard key={product.id} product={product} index={index} quantity={quantities[product.id] ?? 1} onQuantity={(quantity) => setQuantities({ ...quantities, [product.id]: quantity })} onAdd={() => {
             try {
               addToCart(product.id, quantities[product.id] ?? 1);
@@ -387,7 +387,8 @@ function Storefront({ notify }: { notify: (message: string, kind?: "success" | "
               notify(error instanceof Error ? error.message : "Não foi possível adicionar o produto.", "error");
             }
           }} />
-        ))}</div> : <div className="empty-search"><Search size={27} /><h3>Não encontramos esse sabor</h3><p>Tente outra palavra ou escolha uma categoria diferente.</p><Button variant="outline" onClick={() => { setSearch(""); setCategory("Todos"); }}>Ver todos os cupcakes</Button></div>}
+        ))}</div> : products.length === 0 ? <div className="empty-search"><CakeSlice size={27} /><h3>Nenhum produto cadastrado</h3><p>Volte mais tarde para conferir as novidades do cardápio.</p></div>
+          : <div className="empty-search"><Search size={27} /><h3>Não encontramos esse sabor</h3><p>Tente outra palavra ou escolha uma categoria diferente.</p><Button variant="outline" onClick={() => { setSearch(""); setCategory("Todos"); }}>Ver todos os cupcakes</Button></div>}
       </section>
 
       <section className="feature-banner" id="sobre">
@@ -405,7 +406,7 @@ function ProductCard({ product, index, quantity, onQuantity, onAdd }: {
   return (
     <Card className="product-card">
       <div className="product-image" style={{ backgroundImage: `url("${productImage(product.image)}")` }} role="img" aria-label={product.name}>
-        {product.tag && <Badge className="product-tag">{product.tag}</Badge>}
+        {product.available && product.tag && <Badge className="product-tag">{product.tag}</Badge>}
         <span className="product-index">0{index + 1}</span>
         <button type="button" className="favorite-button" aria-label={`Adicionar ${product.name} aos favoritos`} onClick={(event) => { event.currentTarget.classList.toggle("is-favorite"); event.currentTarget.setAttribute("aria-pressed", String(event.currentTarget.classList.contains("is-favorite"))); }} aria-pressed="false"><Heart size={17} /></button>
       </div>
@@ -413,8 +414,9 @@ function ProductCard({ product, index, quantity, onQuantity, onAdd }: {
         <span className="product-category">{product.category}</span>
         <h3>{product.name}</h3>
         <p>{product.description}</p>
+        {!product.available && <Badge>Indisponível no momento</Badge>}
         <div className="product-buy-row"><strong>{formatCurrency(product.price)}<small> / unidade</small></strong><div className="quantity-control" aria-label={`Quantidade de ${product.name}`}><button type="button" aria-label="Diminuir quantidade" onClick={() => onQuantity(Math.max(1, quantity - 1))}><Minus size={13} /></button><span>{quantity}</span><button type="button" aria-label="Aumentar quantidade" onClick={() => onQuantity(Math.min(20, quantity + 1))}><Plus size={13} /></button></div></div>
-        <Button className="add-button" onClick={onAdd}>Adicionar à sacola <Plus size={16} /></Button>
+        <Button className="add-button" onClick={onAdd} disabled={!product.available}>{product.available ? <>Adicionar à sacola <Plus size={16} /></> : "Indisponível"}</Button>
       </CardContent>
     </Card>
   );
@@ -429,7 +431,7 @@ function EmptyCart() {
 }
 
 function CartPage({ notify }: { notify: (message: string, kind?: "success" | "error") => void }) {
-  const { cart, setCartQuantity, removeFromCart } = useShop();
+  const { cart, products, setCartQuantity, removeFromCart } = useShop();
   const router = useRouter();
   const lines = cart.map((item) => ({ ...item, product: products.find((product) => product.id === item.productId) })).filter((line) => line.product);
   const subtotal = lines.reduce((sum, item) => sum + item.product!.price * item.quantity, 0);
@@ -477,35 +479,39 @@ function AddressForm({ value, onChange, errors }: { value: Address; onChange: (v
 
 function DeliveryPage({ notify }: { notify: (message: string, kind?: "success" | "error") => void }) {
   const router = useRouter();
-  const { currentUser, cart, saveAddress } = useShop();
+  const { currentUser, cart, products, saveAddress } = useShop();
   const [address, setAddress] = useState<Address>(() => currentUser?.address ? { ...currentUser.address } : blankAddress(currentUser?.name));
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(Boolean(currentUser?.address));
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   useEffect(() => { if (!itemCount) router.replace("/carrinho"); }, [itemCount, router]);
   if (!itemCount) return <LoadingScreen />;
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const validation = validateAddress(address);
     setErrors(validation);
     setError("");
     if (Object.keys(validation).length) return;
+    setSaving(true);
     try {
-      saveAddress({ ...address, state: address.state.toUpperCase() });
+      await saveAddress({ ...address, state: address.state.toUpperCase() });
       setSaved(true);
       notify("Endereço de entrega salvo.");
       router.push("/pagamento");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível salvar o endereço.");
+    } finally {
+      setSaving(false);
     }
   };
 
   return <div className="checkout-page"><CheckoutSteps active={1} /><PageHeading eyebrow="ENTREGA COM CARINHO" title="Onde entregamos sua doçura?" description="Confirme o endereço para que sua fornada chegue fresquinha." />
     <form className="checkout-layout" onSubmit={submit} noValidate>
       <Card className="checkout-card"><CardContent><div className="card-heading"><span className="card-icon"><MapPin size={19} /></span><div><h2>Endereço de entrega</h2><p>Confira cada detalhe antes de continuar.</p></div></div><AddressForm value={address} onChange={(next) => { setAddress(next); setSaved(false); }} errors={errors} />{error && <Message>{error}</Message>}<div className="form-footnote"><LockKeyhole size={14} /> Seu endereço é usado apenas para esta entrega.</div></CardContent></Card>
-      <div className="delivery-side"><OrderSummary subtotal={cart.reduce((sum, item) => sum + (products.find((product) => product.id === item.productId)?.price ?? 0) * item.quantity, 0)} delivery={calculateDelivery(cart.reduce((sum, item) => sum + (products.find((product) => product.id === item.productId)?.price ?? 0) * item.quantity, 0))} total={cart.reduce((sum, item) => sum + (products.find((product) => product.id === item.productId)?.price ?? 0) * item.quantity, 0) + calculateDelivery(cart.reduce((sum, item) => sum + (products.find((product) => product.id === item.productId)?.price ?? 0) * item.quantity, 0))} action={<><Button type="submit" className="button-primary full-button">{saved ? "Confirmar endereço" : "Salvar e continuar"} <ArrowRight size={17} /></Button><Link href="/carrinho" className="back-to-cart"><ArrowLeft size={14} /> Voltar à sacola</Link></>} /><div className="delivery-promise"><Clock3 size={17} /><span><b>Feito hoje, entregue com cuidado.</b><small>Preparamos cada pedido na hora.</small></span></div></div>
+      <div className="delivery-side"><OrderSummary subtotal={cart.reduce((sum, item) => sum + (products.find((product) => product.id === item.productId)?.price ?? 0) * item.quantity, 0)} delivery={calculateDelivery(cart.reduce((sum, item) => sum + (products.find((product) => product.id === item.productId)?.price ?? 0) * item.quantity, 0))} total={cart.reduce((sum, item) => sum + (products.find((product) => product.id === item.productId)?.price ?? 0) * item.quantity, 0) + calculateDelivery(cart.reduce((sum, item) => sum + (products.find((product) => product.id === item.productId)?.price ?? 0) * item.quantity, 0))} action={<><Button type="submit" className="button-primary full-button" disabled={saving}>{saving ? "Salvando..." : saved ? "Confirmar endereço" : "Salvar e continuar"} <ArrowRight size={17} /></Button><Link href="/carrinho" className="back-to-cart"><ArrowLeft size={14} /> Voltar à sacola</Link></>} /><div className="delivery-promise"><Clock3 size={17} /><span><b>Feito hoje, entregue com cuidado.</b><small>Preparamos cada pedido na hora.</small></span></div></div>
     </form>
   </div>;
 }
@@ -517,7 +523,7 @@ function CheckoutSteps({ active }: { active: number }) {
 
 function PaymentPage({ notify, busy, setBusy }: { notify: (message: string, kind?: "success" | "error") => void; busy: boolean; setBusy: (value: boolean) => void }) {
   const router = useRouter();
-  const { cart, currentUser, createOrder } = useShop();
+  const { cart, currentUser, products, createOrder } = useShop();
   const [payment, setPayment] = useState<PaymentMethod>("Dinheiro");
   const [needsChange, setNeedsChange] = useState(false);
   const [changeFor, setChangeFor] = useState("");
@@ -538,7 +544,7 @@ function PaymentPage({ notify, busy, setBusy }: { notify: (message: string, kind
     { value: "Cartão de crédito", label: "Cartão de crédito", description: "Parcele em até 2x na entrega", icon: CreditCard },
   ];
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     const changeValue = needsChange && payment === "Dinheiro" ? Number(changeFor.replace(",", ".")) : null;
@@ -548,7 +554,7 @@ function PaymentPage({ notify, busy, setBusy }: { notify: (message: string, kind
     }
     setBusy(true);
     try {
-      const order = createOrder(payment, changeValue);
+      const order = await createOrder(payment, changeValue);
       notify("Pedido confirmado com sucesso!");
       router.push(`/pedido/${encodeURIComponent(order.id)}`);
     } catch (caught) {
@@ -567,7 +573,7 @@ function PaymentPage({ notify, busy, setBusy }: { notify: (message: string, kind
         </CardContent></Card>
         <Card className="checkout-card address-review"><CardContent><div className="card-heading"><span className="card-icon"><MapPin size={19} /></span><div><h2>Endereço de entrega</h2><p>{currentUser.address.street}, {currentUser.address.number}{currentUser.address.complement ? ` · ${currentUser.address.complement}` : ""}<br />{currentUser.address.district} · {currentUser.address.city}/{currentUser.address.state} · CEP {currentUser.address.cep}</p></div><Link href="/entrega" className="edit-link">Alterar</Link></div></CardContent></Card>
       </div>
-      <OrderSummary compact subtotal={subtotal} delivery={delivery} total={total} action={<><Button type="submit" className="button-primary full-button" disabled={busy}>{busy ? "Confirmando..." : "Confirmar meu pedido"} <ArrowRight size={17} /></Button>{error && <Message>{error}</Message>}<Link href="/carrinho" className="back-to-cart"><ArrowLeft size={14} /> Voltar à sacola</Link><p className="order-terms"><LockKeyhole size={12} /> Seus dados são salvos somente neste dispositivo.</p></>} />
+      <OrderSummary compact subtotal={subtotal} delivery={delivery} total={total} action={<><Button type="submit" className="button-primary full-button" disabled={busy}>{busy ? "Confirmando..." : "Confirmar meu pedido"} <ArrowRight size={17} /></Button>{error && <Message>{error}</Message>}<Link href="/carrinho" className="back-to-cart"><ArrowLeft size={14} /> Voltar à sacola</Link>      <p className="order-terms"><LockKeyhole size={12} /> Seu pedido será registrado no servidor.</p></>} />
     </form>
   </div>;
 }

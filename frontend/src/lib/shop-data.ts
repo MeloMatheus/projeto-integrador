@@ -12,6 +12,7 @@ export type Product = {
   price: number;
   category: Category;
   image: string;
+  available: boolean;
   tag?: string;
 };
 
@@ -27,15 +28,15 @@ export type Address = {
   notes?: string;
 };
 
-export type DemoUser = {
+export type ShopUser = {
   id: string;
   name: string;
   email: string;
   phone: string;
   role: "CUSTOMER" | "ADMIN";
-  passwordSalt: string;
-  passwordHash: string;
   address: Address | null;
+  addressId?: string | null;
+  token?: string;
 };
 
 export type CartItem = { productId: string; quantity: number };
@@ -57,71 +58,55 @@ export type Order = {
 export const DELIVERY_FEE = 8.9;
 export const FREE_DELIVERY_FROM = 120;
 
-export const products: Product[] = [
+export const productPresentation: Omit<Product, "id" | "price" | "available">[] = [
   {
-    id: "brigadeiro-supremo",
     name: "Brigadeiro Supremo",
     description: "Chocolate intenso, brigadeiro cremoso e granulado belga.",
-    price: 14.9,
     category: "Chocolate",
     image: "photo-1576618148400-f54bed99fcfd",
     tag: "Mais amado",
   },
   {
-    id: "nuvem-baunilha",
     name: "Nuvem de Baunilha",
     description: "Massa fofinha de baunilha com um delicado buttercream.",
-    price: 12.9,
     category: "Baunilha",
     image: "photo-1486427944299-d1955d23e34d",
   },
   {
-    id: "morango-encantado",
     name: "Morango Encantado",
     description: "Recheio de morangos fresquinhos e cobertura rosada.",
-    price: 15.9,
     category: "Morango",
     image: "photo-1614707267537-b85aaf00c4b7",
     tag: "Feito com fruta",
   },
   {
-    id: "red-velvet",
     name: "Red Velvet",
     description: "Massa aveludada com frosting de cream cheese.",
-    price: 16.9,
     category: "Red velvet",
     image: "photo-1587668178277-295251f900ce",
   },
   {
-    id: "doce-de-leite",
     name: "Doce de Leite",
     description: "Doce de leite artesanal, flor de sal e massa amanteigada.",
-    price: 14.5,
     category: "Especiais",
     image: "photo-1603532648955-039310d9ed75",
   },
   {
-    id: "choco-miolo",
     name: "Choco Miolo",
     description: "Surpresa de ganache no coração de um bolinho de cacau.",
-    price: 15.5,
     category: "Chocolate",
     image: "photo-1606313564200-e75d5e30476c",
     tag: "Coração cremoso",
   },
   {
-    id: "oreo-cream",
     name: "Oreo Cream",
     description: "Biscoito crocante, creme de baunilha e muita diversão.",
-    price: 16.5,
     category: "Especiais",
     image: "photo-1602351447937-745cb720612f",
   },
   {
-    id: "confete-magico",
     name: "Confete Mágico",
     description: "Baunilha, confeitos coloridos e memórias felizes.",
-    price: 13.5,
     category: "Baunilha",
     image: "photo-1519869325930-281384150729",
     tag: "Alegria em cada mordida",
@@ -131,7 +116,9 @@ export const products: Product[] = [
 export const categories = ["Todos", "Chocolate", "Baunilha", "Morango", "Red velvet", "Especiais"];
 
 export function productImage(image: string) {
-  return `https://images.unsplash.com/${image}?auto=format&fit=crop&w=900&q=85`;
+  return image.startsWith("http") || image.startsWith("/")
+    ? image
+    : `https://images.unsplash.com/${image}?auto=format&fit=crop&w=900&q=85`;
 }
 
 export function formatCurrency(value: number) {
