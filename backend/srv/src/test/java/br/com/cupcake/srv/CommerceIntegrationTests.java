@@ -25,8 +25,10 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -58,7 +60,7 @@ class CommerceIntegrationTests {
     void seedLookupData() {
         ensureProfile("CLIENTE");
         PerfilModel adminProfile = ensureProfile("ADMIN");
-        ensureOrderStatus("PENDENTE_PAGAMENTO", (short) 1);
+        ensureOrderStatus("PAGAMENTO_ENTREGA", (short) 1);
         ensureOrderStatus("PAGO", (short) 2);
         ensureOrderStatus("EM_PREPARACAO", (short) 3);
         ensureOrderStatus("ENVIADO", (short) 4);
@@ -90,6 +92,10 @@ class CommerceIntegrationTests {
         register(clientEmail, "buyer-password-123");
         String clientToken = token(clientEmail, "buyer-password-123");
         String adminToken = token(adminEmail, ADMIN_PASSWORD);
+        String clientId = usuarioRepository.findByEmailIgnoreCaseAndAtivoTrue(clientEmail)
+                .orElseThrow()
+                .getId()
+                .toString();
 
         MvcResult productResult = mockMvc.perform(post("/api/produtos")
                         .header("Authorization", "Bearer " + adminToken)
@@ -101,7 +107,7 @@ class CommerceIntegrationTests {
                 .andReturn();
         String productId = json(productResult).get("idProduto").asText();
 
-        mockMvc.perform(post("/api/carrinho/itens")
+        mockMvc.perform(post("/api/carrinho/{idUsuario}/itens", clientId)
                         .header("Authorization", "Bearer " + clientToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(java.util.Map.of(
@@ -110,6 +116,28 @@ class CommerceIntegrationTests {
                         ))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.subtotal").value(25.0));
+        mockMvc.perform(put("/api/carrinho/{idUsuario}/itens", clientId)
+                        .header("Authorization", "Bearer " + clientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "idProduto", productId,
+                                "quantidade", 3
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itens[0].quantidade").value(3))
+                .andExpect(jsonPath("$.subtotal").value(37.5));
+        mockMvc.perform(delete("/api/carrinho/{idUsuario}/itens/{produtoId}", clientId, productId)
+                        .header("Authorization", "Bearer " + clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itens.length()").value(0));
+        mockMvc.perform(post("/api/carrinho/{idUsuario}/itens", clientId)
+                        .header("Authorization", "Bearer " + clientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "idProduto", productId,
+                                "quantidade", 2
+                        ))))
+                .andExpect(status().isCreated());
 
         MvcResult addressResult = mockMvc.perform(post("/api/enderecos")
                         .header("Authorization", "Bearer " + clientToken)
@@ -128,11 +156,6 @@ class CommerceIntegrationTests {
                 .andExpect(status().isCreated())
                 .andReturn();
         String addressId = json(addressResult).get("idEndereco").asText();
-        String clientId = usuarioRepository.findByEmailIgnoreCaseAndAtivoTrue(clientEmail)
-                .orElseThrow()
-                .getId()
-                .toString();
-
         mockMvc.perform(get("/api/carrinho/{idUsuario}", clientId)
                         .header("Authorization", "Bearer " + clientToken))
                 .andExpect(status().isOk())
@@ -172,7 +195,7 @@ class CommerceIntegrationTests {
                 .andExpect(jsonPath("$.ufEntrega").value("SP"))
                 .andExpect(jsonPath("$.itens[0].nomeProduto").value("Cupcake de teste"))
                 .andExpect(jsonPath("$.itens[0].subtotal").value(25.0))
-                .andExpect(jsonPath("$.status").value("PENDENTE_PAGAMENTO"))
+                .andExpect(jsonPath("$.status").value("PAGAMENTO_ENTREGA"))
                 .andExpect(jsonPath("$.historico.length()").value(1))
                 .andReturn();
         JsonNode order = json(orderResult);
@@ -242,6 +265,14 @@ class CommerceIntegrationTests {
                 .toString();
         mockMvc.perform(get("/api/carrinho/{idUsuario}", otherId)
                         .header("Authorization", "Bearer " + clientToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/carrinho/{idUsuario}/itens", otherId)
+                        .header("Authorization", "Bearer " + clientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "idProduto", productId,
+                                "quantidade", 1
+                        ))))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/enderecos/{idUsuario}", otherId)
                         .header("Authorization", "Bearer " + clientToken))

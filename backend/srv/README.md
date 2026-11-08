@@ -33,6 +33,8 @@ Ao iniciar pela IDE, configure `JWT_SECRET` nas variáveis de ambiente da config
 
 O Hibernate valida o esquema existente ao iniciar; a aplicação não cria nem atualiza tabelas automaticamente. `JWT_SECRET` é obrigatório; o token é assinado com HS256 e expira após `JWT_EXPIRATION` segundos. Tokens emitidos não são revogados automaticamente por logout.
 
+O status inicial dos pedidos é `PAGAMENTO_ENTREGA`. Em bancos já existentes, execute `src/main/resources/db/migration/rename-pendente-pagamento-status.sql` antes de atualizar a API.
+
 Se a inicialização falhar ao determinar o dialeto, confirme que PostgreSQL está em execução, que o banco indicado por `DB_URL` existe e que `DB_USERNAME`/`DB_PASSWORD` estão corretos. O dialeto PostgreSQL é configurado explicitamente; isso não elimina a necessidade de uma conexão JDBC funcional nem da criação prévia do esquema.
 
 Para provisionar o primeiro administrador, preencha `INITIAL_ADMIN_EMAIL` e `INITIAL_ADMIN_PASSWORD` no `.env` (senha de pelo menos 12 caracteres) antes do primeiro início. O usuário é criado apenas se o e-mail ainda não existir; a configuração não promove nem altera contas existentes. Remova a senha do ambiente após o provisionamento.
@@ -54,8 +56,10 @@ GET /api/enderecos/UUID_DO_USUARIO
 POST /api/enderecos
 {"identificacao":"Casa","destinatario":"Cliente","cep":"01000-000","logradouro":"Rua Exemplo","numero":"10","bairro":"Centro","cidade":"São Paulo","uf":"SP","principal":true}
 GET /api/carrinho/UUID_DO_USUARIO
-POST /api/carrinho/itens
+POST /api/carrinho/UUID_DO_USUARIO/itens
 {"idProduto":"UUID_DO_PRODUTO","quantidade":2}
+PUT /api/carrinho/UUID_DO_USUARIO/itens
+DELETE /api/carrinho/UUID_DO_USUARIO/itens/UUID_DO_PRODUTO
 POST /api/pedidos
 {"idEndereco":"UUID_DO_ENDERECO","codigoCupom":"DOCE10"}
 GET /api/pedidos/usuario/UUID_DO_USUARIO
@@ -64,7 +68,7 @@ POST /api/pedidos/UUID_DO_PEDIDO/pagamentos
 GET /api/pedidos
 ```
 
-As consultas de endereços e carrinho recebem o ID do usuário na rota; a consulta de pedidos filtrada por usuário usa `/api/pedidos/usuario/{idUsuario}` para não conflitar com a busca de um pedido por ID. Clientes só podem consultar os próprios dados; administradores podem filtrar pedidos por qualquer usuário. O checkout exige um endereço previamente salvo e copia seus dados para o pedido; o frete permanece zerado até haver uma regra de cálculo. A chave de idempotência da tentativa de pagamento permite que o cliente repita a requisição sem criar outra cobrança. O carrinho usa o preço atual do produto quando o item é adicionado/atualizado e o checkout recalcula e registra o preço e nome vigentes no pedido. Pedidos cujo total seja zero após desconto são finalizados como pagos sem criar uma tentativa de cobrança. Produtos e cupons são gerenciados por `ADMIN`; as alterações de status ficam restritas a rotas administrativas e geram histórico.
+As rotas do carrinho e as consultas de endereços recebem o ID do usuário na rota; clientes só podem acessar os próprios dados. A consulta de pedidos filtrada por usuário usa `/api/pedidos/usuario/{idUsuario}` para não conflitar com a busca de um pedido por ID; administradores podem filtrar pedidos por qualquer usuário. O checkout exige um endereço previamente salvo e copia seus dados para o pedido; o frete permanece zerado até haver uma regra de cálculo. A chave de idempotência da tentativa de pagamento permite que o cliente repita a requisição sem criar outra cobrança. O carrinho usa o preço atual do produto quando o item é adicionado/atualizado e o checkout recalcula e registra o preço e nome vigentes no pedido. Pedidos cujo total seja zero após desconto são finalizados como pagos sem criar uma tentativa de cobrança. Produtos e cupons são gerenciados por `ADMIN`; as alterações de status ficam restritas a rotas administrativas e geram histórico.
 
 Cupons são criados por um administrador em `POST /api/admin/cupons`; por exemplo, envie `{"codigo":"DOCE10","tipoDesconto":"PERCENTUAL","valorDesconto":10,"dataInicio":"2026-01-01T00:00:00","dataFim":"2027-01-01T00:00:00","valorMinimoPedido":0,"ativo":true}`. Para alterar o status do pedido, use `PUT /api/pedidos/admin/UUID_DO_PEDIDO/status` com `{"status":"EM_PREPARACAO","observacao":"Produção iniciada"}`. A confirmação demonstrativa do pagamento usa `POST /api/admin/pagamentos/UUID_DO_PAGAMENTO/confirmacao` com `{"resultado":"APROVADO","transacaoExterna":"ref-do-operador"}`.
 

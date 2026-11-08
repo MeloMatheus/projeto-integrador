@@ -125,7 +125,7 @@ public class PedidoService {
         boolean semCobranca = total.signum() == 0;
         PedidoModel pedido = new PedidoModel();
         pedido.setUsuario(usuario);
-        pedido.setStatusPedido(statusByName(semCobranca ? "PAGO" : "PENDENTE_PAGAMENTO"));
+        pedido.setStatusPedido(statusByName(semCobranca ? "PAGO" : "PAGAMENTO_ENTREGA"));
         pedido.setNumeroPedido("CP-" + UUID.randomUUID().toString().replace("-", "").substring(0, 20).toUpperCase());
         pedido.setSubtotal(subtotal);
         pedido.setValorDesconto(desconto);
@@ -211,7 +211,7 @@ public class PedidoService {
         String current = pedido.getStatusPedido().getNome();
         String next = novoNome.trim().toUpperCase();
         Map<String, Set<String>> transitions = Map.of(
-                "PENDENTE_PAGAMENTO", Set.of("CANCELADO"),
+                "PAGAMENTO_ENTREGA", Set.of("PAGO", "CANCELADO"),
                 "PAGO", Set.of("EM_PREPARACAO"),
                 "EM_PREPARACAO", Set.of("ENVIADO"),
                 "ENVIADO", Set.of("CONCLUIDO")

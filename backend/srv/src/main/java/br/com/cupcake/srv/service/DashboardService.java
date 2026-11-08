@@ -37,7 +37,7 @@ public class DashboardService {
                 usuarioRepository.countByAtivoTrue(),
                 produtoRepository.countByDisponivelTrue(),
                 cupomRepository.countByAtivoTrue(),
-                pedidoRepository.countByStatusPedidoNome("PENDENTE_PAGAMENTO"),
+                pedidoRepository.countByStatusPedidoNome("PAGAMENTO_ENTREGA"),
                 pedidoRepository.count(),
                 pagamentoRepository.totalAprovado()
         );

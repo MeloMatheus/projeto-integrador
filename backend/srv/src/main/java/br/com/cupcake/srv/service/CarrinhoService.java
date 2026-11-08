@@ -45,8 +45,9 @@ public class CarrinhoService {
     }
 
     @Transactional
-    public CarrinhoResponse adicionar(String email, ItemCarrinhoRequest request) {
+    public CarrinhoResponse adicionar(String email, UUID usuarioId, ItemCarrinhoRequest request) {
         UsuarioModel usuario = usuarioService.buscarAtivoPorEmail(email);
+        validarProprietario(usuario, usuarioId);
         CarrinhoModel carrinho = getOrCreate(usuario);
         ProdutoModel produto = produtoService.buscarDisponivel(request.idProduto());
         ItemCarrinhoModel item = itemRepository.findByCarrinhoIdAndProdutoId(carrinho.getId(), produto.getId())
@@ -63,8 +64,9 @@ public class CarrinhoService {
     }
 
     @Transactional
-    public CarrinhoResponse remover(String email, UUID produtoId) {
+    public CarrinhoResponse remover(String email, UUID usuarioId, UUID produtoId) {
         UsuarioModel usuario = usuarioService.buscarAtivoPorEmail(email);
+        validarProprietario(usuario, usuarioId);
         CarrinhoModel carrinho = getOrCreate(usuario);
         ItemCarrinhoModel item = itemRepository.findByCarrinhoIdAndProdutoId(carrinho.getId(), produtoId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item não encontrado no carrinho."));

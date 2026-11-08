@@ -36,25 +36,31 @@ public class CarrinhoController {
         return carrinhoService.obter(authentication.getName(), idUsuario);
     }
 
-    @PostMapping("/itens")
+    @PostMapping("/{idUsuario}/itens")
     @ResponseStatus(HttpStatus.CREATED)
     public CarrinhoResponse adicionar(
             Authentication authentication,
+            @PathVariable UUID idUsuario,
             @Valid @RequestBody ItemCarrinhoRequest request
     ) {
-        return carrinhoService.adicionar(authentication.getName(), request);
+        return carrinhoService.adicionar(authentication.getName(), idUsuario, request);
     }
 
-    @PutMapping("/itens")
+    @PutMapping("/{idUsuario}/itens")
     public CarrinhoResponse atualizar(
             Authentication authentication,
+            @PathVariable UUID idUsuario,
             @Valid @RequestBody ItemCarrinhoRequest request
     ) {
-        return carrinhoService.adicionar(authentication.getName(), request);
+        return carrinhoService.adicionar(authentication.getName(), idUsuario, request);
     }
 
-    @DeleteMapping("/itens/{produtoId}")
-    public CarrinhoResponse remover(Authentication authentication, @PathVariable UUID produtoId) {
-        return carrinhoService.remover(authentication.getName(), produtoId);
+    @DeleteMapping("/{idUsuario}/itens/{produtoId}")
+    public CarrinhoResponse remover(
+            Authentication authentication,
+            @PathVariable UUID idUsuario,
+            @PathVariable UUID produtoId
+    ) {
+        return carrinhoService.remover(authentication.getName(), idUsuario, produtoId);
     }
 }

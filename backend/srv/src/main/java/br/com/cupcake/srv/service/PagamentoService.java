@@ -60,7 +60,7 @@ public class PagamentoService {
             }
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A chave de idempotência já foi usada.");
         }
-        if (!pedido.getStatusPedido().getNome().equals("PENDENTE_PAGAMENTO")) {
+        if (!pedido.getStatusPedido().getNome().equals("PAGAMENTO_ENTREGA")) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "O pedido não está aguardando pagamento.");
         }
         List<PagamentoModel> existing = pagamentoRepository.findByPedidoId(pedidoId);
@@ -108,7 +108,7 @@ public class PagamentoService {
             if (transacaoExterna == null || transacaoExterna.isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A confirmação aprovada exige uma referência de transação.");
             }
-            if (!pagamento.getPedido().getStatusPedido().getNome().equals("PENDENTE_PAGAMENTO")) {
+            if (!pagamento.getPedido().getStatusPedido().getNome().equals("PAGAMENTO_ENTREGA")) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "O pedido não pode mais ser pago.");
             }
             pagamentoRepository.findByTransacaoExterna(transacaoExterna).ifPresent(existing -> {
