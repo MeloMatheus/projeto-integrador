@@ -37,8 +37,9 @@ public class CarrinhoService {
     }
 
     @Transactional
-    public CarrinhoResponse obter(String email) {
+    public CarrinhoResponse obter(String email, UUID usuarioId) {
         UsuarioModel usuario = usuarioService.buscarAtivoPorEmail(email);
+        validarProprietario(usuario, usuarioId);
         CarrinhoModel carrinho = getOrCreate(usuario);
         return response(carrinho);
     }
@@ -85,6 +86,14 @@ public class CarrinhoService {
                     carrinho.setStatus(StatusCarrinho.ATIVO);
                     return carrinhoRepository.save(carrinho);
                 });
+    }
+
+    private void validarProprietario(UsuarioModel usuario, UUID usuarioId) {
+        if (!usuario.getId().equals(usuarioId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "Não é permitido acessar dados de outro usuário."
+            );
+        }
     }
 
     private CarrinhoResponse response(CarrinhoModel carrinho) {

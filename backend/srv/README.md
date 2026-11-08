@@ -50,18 +50,21 @@ Registro público sempre cria `CLIENTE`. Autentique com `POST /api/auth/login` u
 
 ```http
 GET /api/produtos?page=0&size=10&sort=nome,asc
+GET /api/enderecos/UUID_DO_USUARIO
 POST /api/enderecos
 {"identificacao":"Casa","destinatario":"Cliente","cep":"01000-000","logradouro":"Rua Exemplo","numero":"10","bairro":"Centro","cidade":"São Paulo","uf":"SP","principal":true}
+GET /api/carrinho/UUID_DO_USUARIO
 POST /api/carrinho/itens
 {"idProduto":"UUID_DO_PRODUTO","quantidade":2}
 POST /api/pedidos
 {"idEndereco":"UUID_DO_ENDERECO","codigoCupom":"DOCE10"}
+GET /api/pedidos/usuario/UUID_DO_USUARIO
 POST /api/pedidos/UUID_DO_PEDIDO/pagamentos
 {"metodo":"PIX","chaveIdempotencia":"CHAVE_UNICA_DA_TENTATIVA"}
 GET /api/pedidos
 ```
 
-O cliente autenticado só acessa seus endereços, carrinho, pedidos e pagamentos. O checkout exige um endereço previamente salvo e copia seus dados para o pedido; o frete permanece zerado até haver uma regra de cálculo. A chave de idempotência da tentativa de pagamento permite que o cliente repita a requisição sem criar outra cobrança. O carrinho usa o preço atual do produto quando o item é adicionado/atualizado e o checkout recalcula e registra o preço e nome vigentes no pedido. Pedidos cujo total seja zero após desconto são finalizados como pagos sem criar uma tentativa de cobrança. Produtos e cupons são gerenciados por `ADMIN`; as alterações de status ficam restritas a rotas administrativas e geram histórico.
+As consultas de endereços e carrinho recebem o ID do usuário na rota; a consulta de pedidos filtrada por usuário usa `/api/pedidos/usuario/{idUsuario}` para não conflitar com a busca de um pedido por ID. Clientes só podem consultar os próprios dados; administradores podem filtrar pedidos por qualquer usuário. O checkout exige um endereço previamente salvo e copia seus dados para o pedido; o frete permanece zerado até haver uma regra de cálculo. A chave de idempotência da tentativa de pagamento permite que o cliente repita a requisição sem criar outra cobrança. O carrinho usa o preço atual do produto quando o item é adicionado/atualizado e o checkout recalcula e registra o preço e nome vigentes no pedido. Pedidos cujo total seja zero após desconto são finalizados como pagos sem criar uma tentativa de cobrança. Produtos e cupons são gerenciados por `ADMIN`; as alterações de status ficam restritas a rotas administrativas e geram histórico.
 
 Cupons são criados por um administrador em `POST /api/admin/cupons`; por exemplo, envie `{"codigo":"DOCE10","tipoDesconto":"PERCENTUAL","valorDesconto":10,"dataInicio":"2026-01-01T00:00:00","dataFim":"2027-01-01T00:00:00","valorMinimoPedido":0,"ativo":true}`. Para alterar o status do pedido, use `PUT /api/pedidos/admin/UUID_DO_PEDIDO/status` com `{"status":"EM_PREPARACAO","observacao":"Produção iniciada"}`. A confirmação demonstrativa do pagamento usa `POST /api/admin/pagamentos/UUID_DO_PAGAMENTO/confirmacao` com `{"resultado":"APROVADO","transacaoExterna":"ref-do-operador"}`.
 

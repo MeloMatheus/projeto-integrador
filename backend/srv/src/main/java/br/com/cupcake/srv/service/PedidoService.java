@@ -186,6 +186,19 @@ public class PedidoService {
     }
 
     @Transactional(readOnly = true)
+    public Page<PedidoResponse> listarPorUsuario(String email, boolean admin, UUID usuarioId, Pageable pageable) {
+        if (!admin) {
+            UsuarioModel usuario = usuarioService.buscarAtivoPorEmail(email);
+            if (!usuario.getId().equals(usuarioId)) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN, "Não é permitido acessar dados de outro usuário."
+                );
+            }
+        }
+        return pedidoRepository.findByUsuarioId(usuarioId, pageable).map(this::response);
+    }
+
+    @Transactional(readOnly = true)
     public PedidoResponse buscar(String email, boolean admin, UUID id) {
         PedidoModel pedido = findPedido(email, admin, id);
         return response(pedido);

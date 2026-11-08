@@ -31,9 +31,9 @@ public class CarrinhoController {
         this.carrinhoService = carrinhoService;
     }
 
-    @GetMapping
-    public CarrinhoResponse obter(Authentication authentication) {
-        return carrinhoService.obter(authentication.getName());
+    @GetMapping("/{idUsuario}")
+    public CarrinhoResponse obter(Authentication authentication, @PathVariable UUID idUsuario) {
+        return carrinhoService.obter(authentication.getName(), idUsuario);
     }
 
     @PostMapping("/itens")

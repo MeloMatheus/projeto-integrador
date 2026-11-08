@@ -128,6 +128,19 @@ class CommerceIntegrationTests {
                 .andExpect(status().isCreated())
                 .andReturn();
         String addressId = json(addressResult).get("idEndereco").asText();
+        String clientId = usuarioRepository.findByEmailIgnoreCaseAndAtivoTrue(clientEmail)
+                .orElseThrow()
+                .getId()
+                .toString();
+
+        mockMvc.perform(get("/api/carrinho/{idUsuario}", clientId)
+                        .header("Authorization", "Bearer " + clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itens.length()").value(1));
+        mockMvc.perform(get("/api/enderecos/{idUsuario}", clientId)
+                        .header("Authorization", "Bearer " + clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
 
         mockMvc.perform(post("/api/admin/cupons")
                         .header("Authorization", "Bearer " + adminToken)
@@ -164,6 +177,12 @@ class CommerceIntegrationTests {
                 .andReturn();
         JsonNode order = json(orderResult);
         String orderId = order.get("idPedido").asText();
+
+        mockMvc.perform(get("/api/pedidos/usuario/{idUsuario}", clientId)
+                        .header("Authorization", "Bearer " + clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].idPedido").value(orderId));
 
         String idempotencyKey = "payment-" + UUID.randomUUID();
         String paymentRequest = objectMapper.writeValueAsString(java.util.Map.of(
@@ -217,6 +236,19 @@ class CommerceIntegrationTests {
 
         String otherEmail = "other-" + UUID.randomUUID() + "@example.com";
         register(otherEmail, "other-password-123");
+        String otherId = usuarioRepository.findByEmailIgnoreCaseAndAtivoTrue(otherEmail)
+                .orElseThrow()
+                .getId()
+                .toString();
+        mockMvc.perform(get("/api/carrinho/{idUsuario}", otherId)
+                        .header("Authorization", "Bearer " + clientToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/enderecos/{idUsuario}", otherId)
+                        .header("Authorization", "Bearer " + clientToken))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/pedidos/usuario/{idUsuario}", otherId)
+                        .header("Authorization", "Bearer " + clientToken))
+                .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/pedidos/{id}", orderId)
                         .header("Authorization", "Bearer " + token(otherEmail, "other-password-123")))
                 .andExpect(status().isNotFound());

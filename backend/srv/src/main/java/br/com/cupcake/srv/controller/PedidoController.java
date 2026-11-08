@@ -45,6 +45,22 @@ public class PedidoController {
                 PageRequest.of(pageable.getPageNumber(), Math.min(pageable.getPageSize(), 100), pageable.getSort()));
     }
 
+    @GetMapping("/usuario/{idUsuario}")
+    public Page<PedidoResponse> listarPorUsuario(
+            @PathVariable UUID idUsuario,
+            Authentication authentication,
+            Pageable pageable
+    ) {
+        boolean admin = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+        return pedidoService.listarPorUsuario(
+                authentication.getName(),
+                admin,
+                idUsuario,
+                PageRequest.of(pageable.getPageNumber(), Math.min(pageable.getPageSize(), 100), pageable.getSort())
+        );
+    }
+
     @GetMapping("/{id}")
     public PedidoResponse buscar(@PathVariable UUID id, Authentication authentication) {
         boolean admin = authentication.getAuthorities().stream()

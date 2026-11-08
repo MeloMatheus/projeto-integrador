@@ -25,8 +25,13 @@ public class EnderecoService {
     }
 
     @Transactional(readOnly = true)
-    public List<EnderecoResponse> listar(String email) {
+    public List<EnderecoResponse> listar(String email, UUID usuarioId) {
         UsuarioModel usuario = usuarioService.buscarAtivoPorEmail(email);
+        if (!usuario.getId().equals(usuarioId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "Não é permitido acessar dados de outro usuário."
+            );
+        }
         return enderecoRepository.findByUsuarioIdOrderByPrincipalDescCriadoEmDesc(usuario.getId())
                 .stream().map(EnderecoResponse::from).toList();
     }

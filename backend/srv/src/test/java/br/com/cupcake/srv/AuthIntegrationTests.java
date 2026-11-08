@@ -90,7 +90,7 @@ class AuthIntegrationTests {
                 .andExpect(jsonPath("$.tipo").value("Bearer"))
                 .andExpect(jsonPath("$.token", startsWith("eyJ")));
 
-        mockMvc.perform(get("/api/carrinho"))
+        mockMvc.perform(get("/api/carrinho/{idUsuario}", UUID.randomUUID()))
                 .andExpect(status().isUnauthorized());
     }
 
