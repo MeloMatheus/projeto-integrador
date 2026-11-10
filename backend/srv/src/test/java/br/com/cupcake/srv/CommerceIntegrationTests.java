@@ -60,7 +60,7 @@ class CommerceIntegrationTests {
     void seedLookupData() {
         ensureProfile("CLIENTE");
         PerfilModel adminProfile = ensureProfile("ADMIN");
-        ensureOrderStatus("PAGAMENTO_ENTREGA", (short) 1);
+        ensureOrderStatus("PENDENTE_PAGAMENTO", (short) 1);
         ensureOrderStatus("PAGO", (short) 2);
         ensureOrderStatus("EM_PREPARACAO", (short) 3);
         ensureOrderStatus("ENVIADO", (short) 4);
@@ -195,11 +195,17 @@ class CommerceIntegrationTests {
                 .andExpect(jsonPath("$.ufEntrega").value("SP"))
                 .andExpect(jsonPath("$.itens[0].nomeProduto").value("Cupcake de teste"))
                 .andExpect(jsonPath("$.itens[0].subtotal").value(25.0))
-                .andExpect(jsonPath("$.status").value("PAGAMENTO_ENTREGA"))
+                .andExpect(jsonPath("$.status").value("PENDENTE_PAGAMENTO"))
                 .andExpect(jsonPath("$.historico.length()").value(1))
                 .andReturn();
         JsonNode order = json(orderResult);
         String orderId = order.get("idPedido").asText();
+
+        mockMvc.perform(put("/api/pedidos/admin/{id}/status", orderId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"PAGO\"}"))
+                .andExpect(status().isConflict());
 
         mockMvc.perform(get("/api/pedidos/usuario/{idUsuario}", clientId)
                         .header("Authorization", "Bearer " + clientToken))

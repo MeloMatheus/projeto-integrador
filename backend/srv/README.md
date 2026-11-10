@@ -33,7 +33,7 @@ Ao iniciar pela IDE, configure `JWT_SECRET` nas variáveis de ambiente da config
 
 O Hibernate valida o esquema existente ao iniciar; a aplicação não cria nem atualiza tabelas automaticamente. `JWT_SECRET` é obrigatório; o token é assinado com HS256 e expira após `JWT_EXPIRATION` segundos. Tokens emitidos não são revogados automaticamente por logout.
 
-O status inicial dos pedidos é `PAGAMENTO_ENTREGA`. Em bancos já existentes, execute `src/main/resources/db/migration/rename-pendente-pagamento-status.sql` antes de atualizar a API.
+Pedidos com cobrança começam em `PENDENTE_PAGAMENTO` e só avançam para `PAGO` após a confirmação do pagamento. Em bancos já existentes, execute `src/main/resources/db/migration/rename-pendente-pagamento-status.sql` antes de atualizar a API para migrar o status antigo `PAGAMENTO_ENTREGA`.
 
 Se a inicialização falhar ao determinar o dialeto, confirme que PostgreSQL está em execução, que o banco indicado por `DB_URL` existe e que `DB_USERNAME`/`DB_PASSWORD` estão corretos. O dialeto PostgreSQL é configurado explicitamente; isso não elimina a necessidade de uma conexão JDBC funcional nem da criação prévia do esquema.
 

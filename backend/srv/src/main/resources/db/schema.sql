@@ -249,7 +249,7 @@ INSERT INTO perfil (id_perfil, nome, descricao) VALUES
     (gen_random_uuid(), 'CLIENTE', 'Cliente da loja');
 
 INSERT INTO status_pedido (id_status_pedido, nome, descricao, ordem) VALUES
-    (gen_random_uuid(), 'PAGAMENTO_ENTREGA', 'Pagamento será realizado no momento da entrega', 1),
+    (gen_random_uuid(), 'PENDENTE_PAGAMENTO', 'Pagamento deve ser confirmado antes do preparo', 1),
     (gen_random_uuid(), 'PAGO', 'Pagamento confirmado', 2),
     (gen_random_uuid(), 'EM_PREPARACAO', 'Pedido em preparação', 3),
     (gen_random_uuid(), 'ENVIADO', 'Pedido enviado', 4),
