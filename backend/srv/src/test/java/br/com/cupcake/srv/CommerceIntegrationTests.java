@@ -22,6 +22,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -252,7 +253,28 @@ class CommerceIntegrationTests {
         mockMvc.perform(get("/api/admin/dashboard")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.faturamentoConfirmado").value(22.5));
+                .andExpect(jsonPath("$.faturamentoConfirmado").value(22.5))
+                .andExpect(jsonPath("$.periodo").value("ULTIMOS_7_DIAS"))
+                .andExpect(jsonPath("$.faturamentoRecebido").value(22.5))
+                .andExpect(jsonPath("$.pedidosNoPeriodo").value(1))
+                .andExpect(jsonPath("$.ticketMedioRecebido").value(22.5))
+                .andExpect(jsonPath("$.faturamentoPorDia.length()").value(7))
+                .andExpect(jsonPath("$.faturamentoPorDia[6].faturamento").value(22.5))
+                .andExpect(jsonPath("$.pedidosPorStatus[0].status").value("PAGO"))
+                .andExpect(jsonPath("$.pedidosPorStatus[0].quantidade").value(1))
+                .andExpect(jsonPath("$.ultimosPedidos[0].idPedido").value(orderId));
+        mockMvc.perform(get("/api/admin/dashboard")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .queryParam("periodo", "PERSONALIZADO")
+                        .queryParam("dataInicio", LocalDate.now().toString())
+                        .queryParam("dataFim", LocalDate.now().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.faturamentoRecebido").value(22.5))
+                .andExpect(jsonPath("$.faturamentoPorDia.length()").value(1));
+        mockMvc.perform(get("/api/admin/dashboard")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .queryParam("periodo", "PERSONALIZADO"))
+                .andExpect(status().isBadRequest());
         mockMvc.perform(get("/api/admin/dashboard")
                         .header("Authorization", "Bearer " + clientToken))
                 .andExpect(status().isForbidden());
