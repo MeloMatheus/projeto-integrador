@@ -19,6 +19,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -35,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class CommerceIntegrationTests {
     private static final String ADMIN_PASSWORD = "admin-password-123";
 
@@ -205,7 +207,7 @@ class CommerceIntegrationTests {
         mockMvc.perform(put("/api/pedidos/admin/{id}/status", orderId)
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"PAGO\"}"))
+                        .content("{\"status\":\"EM_PREPARACAO\"}"))
                 .andExpect(status().isConflict());
 
         mockMvc.perform(get("/api/pedidos/usuario/{idUsuario}", clientId)
@@ -311,6 +313,89 @@ class CommerceIntegrationTests {
         mockMvc.perform(get("/api/pedidos/{id}", orderId)
                         .header("Authorization", "Bearer " + token(otherEmail, "other-password-123")))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void manuallyMarkingOrderAsPaidRecordsApprovedPaymentAndAllowsDeliveryProgression() throws Exception {
+        String clientEmail = "manual-payment-" + UUID.randomUUID() + "@example.com";
+        register(clientEmail, "buyer-password-123");
+        String clientToken = token(clientEmail, "buyer-password-123");
+        String adminToken = token(adminEmail, ADMIN_PASSWORD);
+        String clientId = usuarioRepository.findByEmailIgnoreCaseAndAtivoTrue(clientEmail)
+                .orElseThrow()
+                .getId()
+                .toString();
+
+        MvcResult productResult = mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"Cupcake de pagamento manual","descricao":"Baunilha","preco":12.50,"disponivel":true}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String productId = json(productResult).get("idProduto").asText();
+        mockMvc.perform(post("/api/carrinho/{idUsuario}/itens", clientId)
+                        .header("Authorization", "Bearer " + clientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "idProduto", productId,
+                                "quantidade", 1
+                        ))))
+                .andExpect(status().isCreated());
+
+        MvcResult addressResult = mockMvc.perform(post("/api/enderecos")
+                        .header("Authorization", "Bearer " + clientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of(
+                                "identificacao", "Casa",
+                                "destinatario", "Cliente",
+                                "cep", "01000-000",
+                                "logradouro", "Rua de teste",
+                                "numero", "123",
+                                "bairro", "Centro",
+                                "cidade", "São Paulo",
+                                "uf", "sp",
+                                "principal", true
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String addressId = json(addressResult).get("idEndereco").asText();
+        MvcResult orderResult = mockMvc.perform(post("/api/pedidos")
+                        .header("Authorization", "Bearer " + clientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(java.util.Map.of("idEndereco", addressId))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String orderId = json(orderResult).get("idPedido").asText();
+
+        mockMvc.perform(put("/api/pedidos/admin/{id}/status", orderId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"PAGO\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PAGO"));
+        mockMvc.perform(get("/api/pedidos/{id}/pagamentos", orderId)
+                        .header("Authorization", "Bearer " + clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("APROVADO"))
+                .andExpect(jsonPath("$[0].metodo").value("ADMINISTRATIVO"))
+                .andExpect(jsonPath("$[0].valor").value(12.5));
+
+        for (String status : new String[]{"EM_PREPARACAO", "ENVIADO", "CONCLUIDO"}) {
+            mockMvc.perform(put("/api/pedidos/admin/{id}/status", orderId)
+                            .header("Authorization", "Bearer " + adminToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(java.util.Map.of("status", status))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value(status));
+        }
+
+        mockMvc.perform(get("/api/admin/dashboard")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.faturamentoConfirmado").value(12.5))
+                .andExpect(jsonPath("$.faturamentoRecebido").value(12.5));
     }
 
     private PerfilModel ensureProfile(String name) {

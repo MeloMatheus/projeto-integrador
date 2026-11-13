@@ -3,6 +3,8 @@ package br.com.cupcake.srv.controller;
 import br.com.cupcake.srv.response.DashboardResponse;
 import br.com.cupcake.srv.service.DashboardService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +18,8 @@ import java.time.LocalDate;
 @PreAuthorize("hasRole('ADMIN')")
 @SecurityRequirement(name = "bearerAuth")
 public class DashboardController {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DashboardController.class);
+
     private final DashboardService dashboardService;
 
     public DashboardController(DashboardService dashboardService) {
@@ -28,6 +32,15 @@ public class DashboardController {
             @RequestParam(required = false) LocalDate dataInicio,
             @RequestParam(required = false) LocalDate dataFim
     ) {
-        return dashboardService.carregar(periodo, dataInicio, dataFim);
+        LOGGER.debug("Requisição recebida para carregar o dashboard. Período: {}", periodo);
+
+        try {
+            DashboardResponse response = dashboardService.carregar(periodo, dataInicio, dataFim);
+            LOGGER.info("Dashboard carregado com sucesso. Período: {}", periodo);
+            return response;
+        } catch (RuntimeException exception) {
+            LOGGER.error("Falha ao carregar o dashboard. Período: {}", periodo, exception);
+            throw exception;
+        }
     }
 }

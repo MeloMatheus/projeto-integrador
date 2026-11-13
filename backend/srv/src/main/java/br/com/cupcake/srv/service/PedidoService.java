@@ -211,7 +211,7 @@ public class PedidoService {
         String current = pedido.getStatusPedido().getNome();
         String next = novoNome.trim().toUpperCase();
         Map<String, Set<String>> transitions = Map.of(
-                "PENDENTE_PAGAMENTO", Set.of("CANCELADO"),
+                "PENDENTE_PAGAMENTO", Set.of("PAGO", "ENVIADO", "CONCLUIDO", "CANCELADO"),
                 "PAGO", Set.of("EM_PREPARACAO"),
                 "EM_PREPARACAO", Set.of("ENVIADO"),
                 "ENVIADO", Set.of("CONCLUIDO")
@@ -224,6 +224,9 @@ public class PedidoService {
         }
         UsuarioModel responsavel = usuarioService.buscarAtivoPorEmail(email);
         changeStatus(pedido, statusByName(next), responsavel, observacao);
+        if (Set.of("PAGO", "ENVIADO", "CONCLUIDO").contains(next)) {
+            registrarPagamentoManual(pedido);
+        }
         if (next.equals("CANCELADO")) {
             StatusPagamentoModel cancelled = statusPagamentoRepository.findByNome("CANCELADO")
                     .orElseThrow(() -> new IllegalStateException("Status de pagamento ausente: CANCELADO"));
@@ -250,6 +253,32 @@ public class PedidoService {
     void changeStatus(PedidoModel pedido, StatusPedidoModel status, UsuarioModel responsavel, String observacao) {
         pedido.setStatusPedido(status);
         registrarHistorico(pedido, status, responsavel, observacao);
+    }
+
+    private void registrarPagamentoManual(PedidoModel pedido) {
+        if (pedido.getValorTotal().signum() == 0) return;
+
+        List<PagamentoModel> payments = pagamentoRepository.findByPedidoId(pedido.getId());
+        if (payments.stream().anyMatch(payment -> payment.getStatusPagamento().getNome().equals("APROVADO"))) {
+            return;
+        }
+
+        StatusPagamentoModel approved = statusPagamentoRepository.findByNome("APROVADO")
+                .orElseThrow(() -> new IllegalStateException("Status de pagamento ausente: APROVADO"));
+        PagamentoModel payment = payments.stream()
+                .filter(item -> item.getStatusPagamento().getNome().equals("PENDENTE"))
+                .findFirst()
+                .orElseGet(() -> {
+                    PagamentoModel manualPayment = new PagamentoModel();
+                    manualPayment.setPedido(pedido);
+                    manualPayment.setMetodo("ADMINISTRATIVO");
+                    manualPayment.setValor(pedido.getValorTotal());
+                    manualPayment.setChaveIdempotencia("manual-order-status-" + pedido.getId());
+                    return manualPayment;
+                });
+        payment.setStatusPagamento(approved);
+        payment.setDataConfirmacao(LocalDateTime.now());
+        pagamentoRepository.save(payment);
     }
 
     private CupomModel validarCupom(String codigo, BigDecimal subtotal) {

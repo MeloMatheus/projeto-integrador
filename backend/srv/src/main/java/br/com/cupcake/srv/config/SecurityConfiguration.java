@@ -63,6 +63,7 @@ public class SecurityConfiguration {
     JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(jwt -> jwt.getClaimAsStringList("roles").stream()
+                .map(role -> role.equalsIgnoreCase("ROLE_ADMINISTRADOR") ? "ROLE_ADMIN" : role)
                 .map(role -> (GrantedAuthority) new SimpleGrantedAuthority(role))
                 .collect(Collectors.toSet()));
         return converter;

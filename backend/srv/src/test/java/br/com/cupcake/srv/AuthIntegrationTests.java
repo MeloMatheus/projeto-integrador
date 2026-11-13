@@ -4,6 +4,8 @@ import br.com.cupcake.srv.model.PerfilModel;
 import br.com.cupcake.srv.repository.PerfilRepository;
 import br.com.cupcake.srv.repository.UsuarioRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -35,6 +38,9 @@ class AuthIntegrationTests {
 
     @Autowired
     private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private JwtAuthenticationConverter jwtAuthenticationConverter;
 
     @BeforeEach
     void ensureClientProfile() {
@@ -116,5 +122,20 @@ class AuthIntegrationTests {
                                 "senha", "password-123"
                         ))))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void administradorRoleGrantsAdminAuthority() {
+        Jwt jwt = Jwt.withTokenValue("token")
+                .header("alg", "HS256")
+                .subject("admin@example.com")
+                .claim("roles", List.of("ROLE_ADMINISTRADOR"))
+                .build();
+
+        var authentication = jwtAuthenticationConverter.convert(jwt);
+
+        org.junit.jupiter.api.Assertions.assertNotNull(authentication);
+        org.junit.jupiter.api.Assertions.assertTrue(authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN")));
     }
 }
