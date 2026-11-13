@@ -113,9 +113,15 @@ export const productPresentation: Omit<Product, "id" | "price" | "available">[] 
   },
 ];
 
-export const categories = ["Todos", "Chocolate", "Baunilha", "Morango", "Red velvet", "Especiais"];
-
 export function productImage(image: string) {
+  const githubBlobImage = image.match(
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/,
+  );
+  if (githubBlobImage) {
+    const [, owner, repository, branch, path] = githubBlobImage;
+    return `https://raw.githubusercontent.com/${owner}/${repository}/${branch}/${path}`;
+  }
+
   return image.startsWith("http") || image.startsWith("/")
     ? image
     : `https://images.unsplash.com/${image}?auto=format&fit=crop&w=900&q=85`;

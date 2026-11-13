@@ -13,15 +13,16 @@ import {
   ClipboardList,
   Clock3,
   CreditCard,
-  Download,
   LayoutDashboard,
   LoaderCircle,
   LogOut,
   PackageCheck,
+  Package,
   RefreshCw,
   ShoppingBag,
-  Sparkles,
+  TicketPercent,
   Truck,
+  UsersRound,
   Wallet,
   XCircle,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import {
   adminDashboardService,
   ORDER_STATUS_COLORS,
   ORDER_STATUS_LABELS,
+  ORDER_STATUS_TRANSITIONS,
   type DashboardPeriod,
   type DashboardSummary,
   type OrderStatus,
@@ -77,7 +79,7 @@ function formatLongDate(date: Date) {
   return date.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
 }
 
-export function AdminDashboard({ userName, onLogout }: { userName: string; onLogout: () => void }) {
+export function AdminDashboard({ userName, token, onLogout }: { userName: string; token: string; onLogout: () => void }) {
   const router = useRouter();
   const [period, setPeriod] = useState<DashboardPeriod>("7days");
   const [startDate, setStartDate] = useState(getDefaultStart);
@@ -86,10 +88,14 @@ export function AdminDashboard({ userName, onLogout }: { userName: string; onLog
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedStatuses, setSelectedStatuses] = useState<Record<string, OrderStatus>>({});
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [orderStatusError, setOrderStatusError] = useState("");
+  const [orderStatusNotice, setOrderStatusNotice] = useState("");
 
   useEffect(() => {
     let active = true;
-    adminDashboardService.getSummary({ period, startDate, endDate })
+    adminDashboardService.getSummary({ period, startDate, endDate }, token)
       .then((result) => {
         if (active) setSummary(result);
       })
@@ -100,7 +106,7 @@ export function AdminDashboard({ userName, onLogout }: { userName: string; onLog
         if (active) setLoading(false);
       });
     return () => { active = false; };
-  }, [period, startDate, endDate, refreshKey]);
+  }, [period, startDate, endDate, refreshKey, token]);
 
   const displayRange = useMemo(() => {
     if (!summary) return "";
@@ -127,6 +133,29 @@ export function AdminDashboard({ userName, onLogout }: { userName: string; onLog
     setRefreshKey((key) => key + 1);
   };
 
+  const saveOrderStatus = async (orderId: string, orderNumber: string) => {
+    const nextStatus = selectedStatuses[orderId];
+    if (!nextStatus) return;
+
+    setUpdatingOrderId(orderId);
+    setOrderStatusError("");
+    setOrderStatusNotice("");
+    try {
+      await adminDashboardService.updateOrderStatus(orderId, nextStatus, token);
+      setSelectedStatuses((current) => {
+        const updated = { ...current };
+        delete updated[orderId];
+        return updated;
+      });
+      setOrderStatusNotice(`Status do pedido ${orderNumber} atualizado.`);
+      refresh();
+    } catch (caught: unknown) {
+      setOrderStatusError(caught instanceof Error ? caught.message : "Não foi possível alterar o status do pedido.");
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
   const changeStartDate = (value: string) => {
     setLoading(true);
     setError("");
@@ -150,7 +179,6 @@ export function AdminDashboard({ userName, onLogout }: { userName: string; onLog
         <a href="#visao-geral" className="admin-nav-item active"><LayoutDashboard size={17} /> Visão geral</a>
         <a href="#pedidos" className="admin-nav-item"><ClipboardList size={17} /> Pedidos <ChevronDown size={13} /></a>
         <div className="admin-sidebar-spacer" />
-        <div className="admin-demo-label"><Sparkles size={14} /><span>Modo de demonstração</span></div>
         <div className="admin-profile">
           <span className="admin-profile-avatar">{userName.charAt(0).toUpperCase()}</span>
           <span><b>{userName}</b><small>Administrador</small></span>
@@ -162,7 +190,7 @@ export function AdminDashboard({ userName, onLogout }: { userName: string; onLog
         <header className="admin-topbar">
           <div className="admin-breadcrumb"><span>Painel</span><b>/</b><strong>Visão geral</strong></div>
           <div className="admin-top-actions">
-            <Badge className="admin-demo-badge"><span /> DADOS DE DEMONSTRAÇÃO</Badge>
+            <Badge className="admin-demo-badge"><span /> DASHBOARD ADMINISTRATIVO</Badge>
             <Button variant="outline" className="admin-logout-button" onClick={logout}><LogOut size={15} /> Sair</Button>
           </div>
         </header>
@@ -180,20 +208,22 @@ export function AdminDashboard({ userName, onLogout }: { userName: string; onLog
           {period === "custom" && <div className="admin-custom-range"><label>De <input type="date" value={startDate} max={endDate} onChange={(event) => changeStartDate(event.target.value)} /></label><span>até</span><label>Até <input type="date" value={endDate} min={startDate} max={dateKey(new Date())} onChange={(event) => changeEndDate(event.target.value)} /></label></div>}
           {error && <div className="admin-error" role="alert"><XCircle size={17} />{error}<button type="button" onClick={refresh}>Tentar novamente</button></div>}
 
-          <section className="admin-metrics" aria-label="Resumo financeiro">
-            <MetricCard icon={CircleDollarSign} label="Faturamento recebido" value={summary ? formatCurrency(summary.revenue) : "—"} meta={summary ? `${summary.receivedOrders} pagamentos recebidos` : "No período selecionado"} tone="rose" loading={loading || Boolean(error)} />
+          <section className="admin-metrics" aria-label="Resumo financeiro do período">
+            <MetricCard icon={CircleDollarSign} label="Faturamento recebido" value={summary ? formatCurrency(summary.revenue) : "—"} meta={summary ? `${summary.totalOrders} pedidos no período` : "No período selecionado"} tone="rose" loading={loading || Boolean(error)} />
             <MetricCard icon={ShoppingBag} label="Pedidos no período" value={summary ? String(summary.totalOrders) : "—"} meta={summary ? `${summary.statuses.CANCELADO} cancelado(s)` : "Compras registradas"} tone="lavender" loading={loading || Boolean(error)} />
             <MetricCard icon={Wallet} label="Ticket médio recebido" value={summary ? formatCurrency(summary.averageOrder) : "—"} meta="Somente pagamentos recebidos" tone="sage" loading={loading || Boolean(error)} />
           </section>
 
-          <section className="admin-dashboard-grid">
-            <Card className="admin-panel-card admin-chart-card">
-              <CardContent>
-                <div className="admin-panel-heading"><div><span className="admin-section-kicker">DESEMPENHO</span><h2>Faturamento recente</h2><p>Valores efetivamente recebidos em cada dia.</p></div><span className="admin-chart-legend"><i /> Faturamento</span></div>
-                {loading ? <ChartSkeleton /> : error ? <DashboardError /> : summary && summary.revenue > 0 ? <RevenueChart data={summary.dailyRevenue} /> : <ChartEmpty />}
-              </CardContent>
-            </Card>
+          <section className="admin-metrics admin-overview-metrics" aria-label="Resumo geral da loja">
+            <MetricCard icon={UsersRound} label="Usuários ativos" value={summary ? String(summary.activeUsers) : "—"} meta="Contas ativas" tone="sage" loading={loading || Boolean(error)} />
+            <MetricCard icon={Package} label="Produtos ativos" value={summary ? String(summary.activeProducts) : "—"} meta="Disponíveis para venda" tone="lavender" loading={loading || Boolean(error)} />
+            <MetricCard icon={TicketPercent} label="Cupons ativos" value={summary ? String(summary.activeCoupons) : "—"} meta="Cupons disponíveis" tone="rose" loading={loading || Boolean(error)} />
+            <MetricCard icon={Clock3} label="Pedidos pendentes" value={summary ? String(summary.pendingOrders) : "—"} meta="Aguardando pagamento" tone="lavender" loading={loading || Boolean(error)} />
+            <MetricCard icon={ClipboardList} label="Total de pedidos" value={summary ? String(summary.allTimeOrders) : "—"} meta="Desde o início da loja" tone="sage" loading={loading || Boolean(error)} />
+            <MetricCard icon={CircleDollarSign} label="Faturamento confirmado total" value={summary ? formatCurrency(summary.confirmedRevenue) : "—"} meta="Pagamentos confirmados" tone="rose" loading={loading || Boolean(error)} />
+          </section>
 
+          <section className="admin-dashboard-grid admin-status-overview">
             <Card className="admin-panel-card admin-status-card">
               <CardContent>
                 <div className="admin-panel-heading"><div><span className="admin-section-kicker">OPERAÇÃO</span><h2>Status dos pedidos</h2><p>Pedidos no período selecionado.</p></div><ShoppingBag size={18} className="admin-heading-icon" /></div>
@@ -210,13 +240,53 @@ export function AdminDashboard({ userName, onLogout }: { userName: string; onLog
           <section className="admin-orders-section" id="pedidos">
             <Card className="admin-panel-card">
               <CardContent>
-                <div className="admin-panel-heading admin-orders-heading"><div><span className="admin-section-kicker">ATIVIDADE RECENTE</span><h2>Últimos pedidos</h2><p>Pedidos recebidos no período selecionado.</p></div><span className="admin-order-count"><ShoppingBag size={14} />{loading || error ? "—" : summary?.totalOrders ?? 0} pedidos</span></div>
-                {loading ? <OrdersSkeleton /> : error ? <DashboardError /> : summary?.recentOrders.length ? <div className="admin-table-wrap"><table className="admin-orders-table"><thead><tr><th>Pedido</th><th>Cliente</th><th>Data</th><th>Status</th><th>Pagamento</th><th className="align-right">Total</th></tr></thead><tbody>{summary.recentOrders.map((order) => <tr key={order.id}><td><b>{order.id}</b></td><td>{order.customerName}</td><td>{new Date(order.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</td><td><OrderStatusBadge status={order.status} /></td><td><span className={`payment-status ${order.paymentStatus === "RECEBIDO" ? "received" : order.paymentStatus === "ESTORNADO" ? "refunded" : "pending"}`}><i />{order.paymentStatus === "RECEBIDO" ? "Recebido" : order.paymentStatus === "ESTORNADO" ? "Estornado" : "Pendente"}</span></td><td className="align-right order-amount">{formatCurrency(order.total)}</td></tr>)}</tbody></table></div> : <OrdersEmpty />}
+                <div className="admin-panel-heading admin-orders-heading"><div><span className="admin-section-kicker">ATIVIDADE RECENTE</span><h2>Últimos pedidos</h2><p>Pedidos recebidos no período selecionado.</p></div><span className="admin-order-count"><ShoppingBag size={14} />{loading || error ? "—" : summary?.recentOrders.length ?? 0} pedidos</span></div>
+                {orderStatusError && <div className="admin-error" role="alert"><XCircle size={16} />{orderStatusError}</div>}
+                {orderStatusNotice && <div className="admin-status-notice" role="status"><CheckCircle2 size={16} />{orderStatusNotice}</div>}
+                {loading ? <OrdersSkeleton /> : error ? <DashboardError /> : summary?.recentOrders.length ? <div className="admin-table-wrap"><table className="admin-orders-table"><thead><tr><th>Número do pedido</th><th>Data</th><th>Status atual</th><th>Alterar status</th><th className="align-right">Total</th></tr></thead><tbody>{summary.recentOrders.map((order) => {
+                  const transitions = ORDER_STATUS_TRANSITIONS[order.status] ?? [];
+                  const selectedStatus = selectedStatuses[order.id] ?? "";
+                  return <tr key={order.id}>
+                    <td><b>{order.number}</b></td>
+                    <td>{new Date(order.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+                    <td><OrderStatusBadge status={order.status} /></td>
+                    <td><div className="admin-status-editor">
+                      <select
+                        aria-label={`Novo status do pedido ${order.number}`}
+                        value={selectedStatus}
+                        disabled={!transitions.length || updatingOrderId !== null}
+                        onChange={(event) => {
+                          setOrderStatusError("");
+                          setOrderStatusNotice("");
+                          const nextStatus = transitions.find((status) => status === event.target.value);
+                          setSelectedStatuses((current) => {
+                            if (nextStatus) return { ...current, [order.id]: nextStatus };
+                            const updated = { ...current };
+                            delete updated[order.id];
+                            return updated;
+                          });
+                        }}
+                      >
+                        <option value="">{transitions.length ? "Selecionar" : "Sem alteração"}</option>
+                        {transitions.map((status) => <option key={status} value={status}>{ORDER_STATUS_LABELS[status]}</option>)}
+                      </select>
+                      <button
+                        type="button"
+                        className="admin-status-save"
+                        disabled={!selectedStatus || updatingOrderId !== null}
+                        onClick={() => void saveOrderStatus(order.id, order.number)}
+                      >
+                        {updatingOrderId === order.id ? <LoaderCircle size={13} className="is-spinning" /> : "Salvar"}
+                      </button>
+                    </div></td>
+                    <td className="align-right order-amount">{formatCurrency(order.total)}</td>
+                  </tr>;
+                })}</tbody></table></div> : <OrdersEmpty />}
               </CardContent>
             </Card>
           </section>
 
-          <footer className="admin-footer"><span>Doce Miolo · Administração</span><span><span className="admin-live-dot" /> Dados de demonstração · Conector de API pronto para integração</span></footer>
+          <footer className="admin-footer"><span>Doce Miolo · Administração</span><span><span className="admin-live-dot" /> Indicadores fornecidos pelo serviço administrativo</span></footer>
         </div>
       </main>
     </div>
@@ -238,41 +308,6 @@ function OrderStatusBadge({ status }: { status: OrderStatus }) {
   return <span className={`order-status-badge status-${status.toLowerCase()}`}><i />{ORDER_STATUS_LABELS[status]}</span>;
 }
 
-function RevenueChart({ data }: { data: DashboardSummary["dailyRevenue"] }) {
-  const width = 740;
-  const height = 228;
-  const left = 42;
-  const right = 8;
-  const top = 12;
-  const bottom = 30;
-  const plotWidth = width - left - right;
-  const plotHeight = height - top - bottom;
-  const maximum = Math.max(...data.map((point) => point.revenue), 0);
-  const scale = maximum || 1;
-  const points = data.map((point, index) => ({
-    ...point,
-    x: left + (data.length === 1 ? plotWidth / 2 : index / (data.length - 1) * plotWidth),
-    y: top + plotHeight - point.revenue / scale * plotHeight,
-  }));
-  const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x},${point.y}`).join(" ");
-  const areaPath = `${path} L ${points.at(-1)?.x ?? left},${top + plotHeight} L ${points[0]?.x ?? left},${top + plotHeight} Z`;
-  const visibleLabels = points.filter((_, index) => data.length <= 7 || index % Math.ceil(data.length / 7) === 0 || index === data.length - 1);
-  const tickValues = [maximum, maximum / 2, 0];
-
-  return <div className="admin-chart-wrap"><div className="chart-y-labels">{tickValues.map((value, index) => <span key={index}>{formatCurrency(value).replace(",00", "")}</span>)}</div><svg className="admin-revenue-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Gráfico do faturamento diário. Total no período: ${formatCurrency(data.reduce((sum, point) => sum + point.revenue, 0))}.`}>
-    <defs><linearGradient id="revenue-gradient" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#b76a78" stopOpacity=".22" /><stop offset="100%" stopColor="#b76a78" stopOpacity="0" /></linearGradient></defs>
-    {tickValues.map((_, index) => { const y = top + plotHeight * index / 2; return <line key={index} x1={left} x2={width - right} y1={y} y2={y} stroke="#eee9e3" strokeDasharray={index === 2 ? "0" : "4 5"} />; })}
-    <path d={areaPath} fill="url(#revenue-gradient)" />
-    <path d={path} fill="none" stroke="#ad6170" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    {points.map((point) => point.revenue > 0 && <circle key={point.date} cx={point.x} cy={point.y} r="3.5" fill="#fff" stroke="#ad6170" strokeWidth="2" />)}
-    {visibleLabels.map((point) => <text key={point.date} x={point.x} y={height - 8} textAnchor="middle" fill="#9b8f86" fontSize="9">{point.label}</text>)}
-  </svg></div>;
-}
-
-function ChartSkeleton() {
-  return <div className="admin-chart-skeleton"><LoaderCircle size={22} className="is-spinning" /><span>Carregando faturamento...</span></div>;
-}
-
 function StatusSkeleton() {
   return <div className="admin-status-skeleton">{statusOrder.slice(0, 5).map((status) => <i key={status} />)}</div>;
 }
@@ -283,10 +318,6 @@ function OrdersSkeleton() {
 
 function DashboardError() {
   return <div className="admin-empty-state"><XCircle size={22} /><b>Não foi possível carregar esta seção.</b><span>Tente atualizar os dados.</span></div>;
-}
-
-function ChartEmpty() {
-  return <div className="admin-empty-state"><Download size={23} /><b>Sem faturamento recebido neste período</b><span>Os valores aparecerão quando houver pagamentos confirmados.</span></div>;
 }
 
 function StatusEmpty() {

@@ -1,13 +1,11 @@
 export type DashboardPeriod = "today" | "7days" | "30days" | "custom";
 export type OrderStatus = "PENDENTE" | "PAGO" | "EM_PROCESSAMENTO" | "ENVIADO" | "CONCLUIDO" | "CANCELADO";
-export type PaymentStatus = "PENDENTE" | "RECEBIDO" | "ESTORNADO";
 
 export type DashboardOrder = {
   id: string;
-  customerName: string;
+  number: string;
   createdAt: string;
   status: OrderStatus;
-  paymentStatus: PaymentStatus;
   total: number;
 };
 
@@ -15,15 +13,20 @@ export type DailyRevenue = {
   date: string;
   label: string;
   revenue: number;
-  orders: number;
 };
 
 export type DashboardSummary = {
+  activeUsers: number;
+  activeProducts: number;
+  activeCoupons: number;
+  pendingOrders: number;
+  allTimeOrders: number;
+  confirmedRevenue: number;
+  period: string;
   startDate: string;
   endDate: string;
   totalOrders: number;
   revenue: number;
-  receivedOrders: number;
   averageOrder: number;
   statuses: Record<OrderStatus, number>;
   dailyRevenue: DailyRevenue[];
@@ -37,11 +40,11 @@ export type DashboardQuery = {
 };
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  PENDENTE: "Pendentes",
-  PAGO: "Pagos",
-  EM_PROCESSAMENTO: "Em processamento",
-  ENVIADO: "Enviados",
-  CONCLUIDO: "Concluídos",
+  PENDENTE: "Aguardando pagamento",
+  PAGO: "Pago",
+  EM_PROCESSAMENTO: "Em preparação",
+  ENVIADO: "Em entrega",
+  CONCLUIDO: "Entregue",
   CANCELADO: "Cancelados",
 };
 
@@ -54,120 +57,251 @@ export const ORDER_STATUS_COLORS: Record<OrderStatus, string> = {
   CANCELADO: "#c47676",
 };
 
+export const ORDER_STATUS_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
+  PENDENTE: ["PAGO", "ENVIADO", "CONCLUIDO", "CANCELADO"],
+  PAGO: ["EM_PROCESSAMENTO"],
+  EM_PROCESSAMENTO: ["ENVIADO"],
+  ENVIADO: ["CONCLUIDO"],
+};
+
+const backendStatusNames: Record<OrderStatus, string> = {
+  PENDENTE: "PENDENTE_PAGAMENTO",
+  PAGO: "PAGO",
+  EM_PROCESSAMENTO: "EM_PREPARACAO",
+  ENVIADO: "ENVIADO",
+  CONCLUIDO: "CONCLUIDO",
+  CANCELADO: "CANCELADO",
+};
+
 const statuses: OrderStatus[] = [
-  "CONCLUIDO",
-  "EM_PROCESSAMENTO",
-  "ENVIADO",
   "PENDENTE",
   "PAGO",
+  "EM_PROCESSAMENTO",
+  "ENVIADO",
+  "CONCLUIDO",
   "CANCELADO",
 ];
 
-function toDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+type BackendDashboard = {
+  usuariosAtivos: number;
+  produtosAtivos: number;
+  cuponsAtivos: number;
+  pedidosPendentes: number;
+  totalPedidos: number;
+  faturamentoConfirmado: number;
+  periodo: string;
+  dataInicio: string;
+  dataFim: string;
+  faturamentoRecebido: number;
+  pedidosNoPeriodo: number;
+  ticketMedioRecebido: number;
+  faturamentoPorDia: { data: string; faturamento: number }[];
+  pedidosPorStatus: { status: string; quantidade: number }[];
+  ultimosPedidos: {
+    idPedido: string;
+    numeroPedido: string;
+    status: string;
+    dataPedido: string;
+    valorTotal: number;
+  }[];
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function fromDateKey(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day);
+function readNumber(value: unknown, field: string): number {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  if (!Number.isFinite(parsed)) throw new Error(`O campo ${field} retornado pela API é inválido.`);
+  return parsed;
 }
 
-function getMockOrders(): DashboardOrder[] {
-  const now = new Date();
+function readString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value) throw new Error(`O campo ${field} retornado pela API é inválido.`);
+  return value;
+}
 
-  return Array.from({ length: 54 }, (_, index) => {
-    const createdAt = new Date(now);
-    createdAt.setDate(now.getDate() - (index % 30));
-    createdAt.setHours(8 + ((index * 7) % 11), (index * 13) % 60, 0, 0);
-    const status = statuses[(index * 5 + Math.floor(index / 4)) % statuses.length];
-    const names = ["Mariana Costa", "Beatriz Almeida", "Lucas Ferreira", "Ana Oliveira", "Camila Santos", "Rafael Lima"];
+function readDashboard(payload: unknown): BackendDashboard {
+  if (!isRecord(payload) || !Array.isArray(payload.faturamentoPorDia) ||
+    !Array.isArray(payload.pedidosPorStatus) || !Array.isArray(payload.ultimosPedidos)) {
+    throw new Error("A API retornou o dashboard em formato inválido.");
+  }
 
+  const statusesData = payload.pedidosPorStatus.map((entry, index) => {
+    if (!isRecord(entry)) throw new Error(`O status ${index + 1} retornado pela API é inválido.`);
     return {
-      id: `DM-${createdAt.getTime().toString(36).toUpperCase()}-${String(index + 1).padStart(3, "0")}`,
-      customerName: names[index % names.length],
-      createdAt: createdAt.toISOString(),
-      status,
-      paymentStatus: status === "CANCELADO"
-        ? "ESTORNADO"
-        : status === "PENDENTE"
-          ? "PENDENTE"
-          : "RECEBIDO",
-      total: [38.7, 54.8, 29.8, 72.4, 45.6, 96.3, 34.5, 61.2][index % 8],
+      status: readString(entry.status, `pedidosPorStatus[${index}].status`),
+      quantidade: readNumber(entry.quantidade, `pedidosPorStatus[${index}].quantidade`),
     };
   });
+  const dailyData = payload.faturamentoPorDia.map((entry, index) => {
+    if (!isRecord(entry)) throw new Error(`O faturamento diário ${index + 1} retornado pela API é inválido.`);
+    return {
+      data: readString(entry.data, `faturamentoPorDia[${index}].data`),
+      faturamento: readNumber(entry.faturamento, `faturamentoPorDia[${index}].faturamento`),
+    };
+  });
+  const ordersData = payload.ultimosPedidos.map((entry, index) => {
+    if (!isRecord(entry)) throw new Error(`O pedido recente ${index + 1} retornado pela API é inválido.`);
+    return {
+      idPedido: readString(entry.idPedido, `ultimosPedidos[${index}].idPedido`),
+      numeroPedido: readString(entry.numeroPedido, `ultimosPedidos[${index}].numeroPedido`),
+      status: readString(entry.status, `ultimosPedidos[${index}].status`),
+      dataPedido: readString(entry.dataPedido, `ultimosPedidos[${index}].dataPedido`),
+      valorTotal: readNumber(entry.valorTotal, `ultimosPedidos[${index}].valorTotal`),
+    };
+  });
+
+  return {
+    usuariosAtivos: readNumber(payload.usuariosAtivos, "usuariosAtivos"),
+    produtosAtivos: readNumber(payload.produtosAtivos, "produtosAtivos"),
+    cuponsAtivos: readNumber(payload.cuponsAtivos, "cuponsAtivos"),
+    pedidosPendentes: readNumber(payload.pedidosPendentes, "pedidosPendentes"),
+    totalPedidos: readNumber(payload.totalPedidos, "totalPedidos"),
+    faturamentoConfirmado: readNumber(payload.faturamentoConfirmado, "faturamentoConfirmado"),
+    periodo: readString(payload.periodo, "periodo"),
+    dataInicio: readString(payload.dataInicio, "dataInicio"),
+    dataFim: readString(payload.dataFim, "dataFim"),
+    faturamentoRecebido: readNumber(payload.faturamentoRecebido, "faturamentoRecebido"),
+    pedidosNoPeriodo: readNumber(payload.pedidosNoPeriodo, "pedidosNoPeriodo"),
+    ticketMedioRecebido: readNumber(payload.ticketMedioRecebido, "ticketMedioRecebido"),
+    faturamentoPorDia: dailyData,
+    pedidosPorStatus: statusesData,
+    ultimosPedidos: ordersData,
+  };
 }
 
-function getPeriodRange(query: DashboardQuery, now: Date) {
-  const end = new Date(now);
-  end.setHours(23, 59, 59, 999);
-  let start = new Date(now);
-  start.setHours(0, 0, 0, 0);
+function mapStatus(status: string): OrderStatus {
+  switch (status) {
+    case "PENDENTE_PAGAMENTO": return "PENDENTE";
+    case "EM_PREPARACAO": return "EM_PROCESSAMENTO";
+    case "PAGO":
+    case "ENVIADO":
+    case "CONCLUIDO":
+    case "CANCELADO":
+      return status;
+    default:
+      throw new Error(`A API retornou um status de pedido desconhecido: ${status}.`);
+  }
+}
 
-  if (query.period === "7days") start.setDate(start.getDate() - 6);
-  if (query.period === "30days") start.setDate(start.getDate() - 29);
+function formatDayLabel(date: string) {
+  return new Date(`${date}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
 
+function mapDashboard(data: BackendDashboard): DashboardSummary {
+  const statusCounts = Object.fromEntries(statuses.map((status) => [status, 0])) as Record<OrderStatus, number>;
+  for (const entry of data.pedidosPorStatus) {
+    const status = mapStatus(entry.status);
+    statusCounts[status] += entry.quantidade;
+  }
+
+  return {
+    activeUsers: data.usuariosAtivos,
+    activeProducts: data.produtosAtivos,
+    activeCoupons: data.cuponsAtivos,
+    pendingOrders: data.pedidosPendentes,
+    allTimeOrders: data.totalPedidos,
+    confirmedRevenue: data.faturamentoConfirmado,
+    period: data.periodo,
+    startDate: data.dataInicio,
+    endDate: data.dataFim,
+    totalOrders: data.pedidosNoPeriodo,
+    revenue: data.faturamentoRecebido,
+    averageOrder: data.ticketMedioRecebido,
+    statuses: statusCounts,
+    dailyRevenue: data.faturamentoPorDia.map((entry) => ({
+      date: entry.data,
+      label: formatDayLabel(entry.data),
+      revenue: entry.faturamento,
+    })),
+    recentOrders: data.ultimosPedidos.map((order) => ({
+      id: order.idPedido,
+      number: order.numeroPedido,
+      createdAt: order.dataPedido,
+      status: mapStatus(order.status),
+      total: order.valorTotal,
+    })),
+  };
+}
+
+async function fetchDashboard(query: DashboardQuery, token: string): Promise<DashboardSummary> {
+  const parameters = new URLSearchParams({
+    periodo: query.period === "today"
+      ? "HOJE"
+      : query.period === "7days"
+        ? "ULTIMOS_7_DIAS"
+        : query.period === "30days"
+          ? "ULTIMOS_30_DIAS"
+          : "PERSONALIZADO",
+  });
   if (query.period === "custom") {
     if (!query.startDate || !query.endDate) {
       throw new Error("Selecione a data inicial e a data final do período.");
     }
-    start = fromDateKey(query.startDate);
-    end.setTime(fromDateKey(query.endDate).getTime());
-    end.setHours(23, 59, 59, 999);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
-      throw new Error("A data inicial deve ser anterior ou igual à data final.");
-    }
-    const days = Math.floor((end.getTime() - start.getTime()) / 86_400_000);
-    if (days > 89) throw new Error("Escolha um intervalo de até 90 dias.");
+    parameters.set("dataInicio", query.startDate);
+    parameters.set("dataFim", query.endDate);
   }
 
-  return { start, end };
+  const response = await fetch(`/api/admin/dashboard?${parameters.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  const responseText = await response.text();
+  let payload: unknown = null;
+  if (responseText) {
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      payload = responseText;
+    }
+  }
+
+  if (!response.ok) {
+    const message = isRecord(payload) && typeof payload.detail === "string"
+      ? payload.detail
+      : isRecord(payload) && typeof payload.message === "string"
+        ? payload.message
+        : typeof payload === "string" && payload
+          ? payload
+          : `A API recusou a solicitação (HTTP ${response.status}).`;
+    throw new Error(message);
+  }
+
+  return mapDashboard(readDashboard(payload));
 }
 
-async function fetchMockDashboard(query: DashboardQuery): Promise<DashboardSummary> {
-  await new Promise((resolve) => window.setTimeout(resolve, 220));
+async function updateOrderStatus(orderId: string, status: OrderStatus, token: string): Promise<void> {
+  const response = await fetch(`/api/pedidos/admin/${encodeURIComponent(orderId)}/status`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ status: backendStatusNames[status] }),
+  });
+  if (response.ok) return;
 
-  const now = new Date();
-  const { start, end } = getPeriodRange(query, now);
-  const orders = getMockOrders()
-    .filter((order) => {
-      const date = new Date(order.createdAt);
-      return date >= start && date <= end;
-    })
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-  const statusesSummary = Object.fromEntries(statuses.map((status) => [status, 0])) as Record<OrderStatus, number>;
-  for (const order of orders) statusesSummary[order.status] += 1;
-
-  const received = orders.filter((order) => order.paymentStatus === "RECEBIDO" && order.status !== "CANCELADO");
-  const dailyRevenue: DailyRevenue[] = [];
-  const cursor = new Date(start);
-  while (cursor <= end) {
-    const date = toDateKey(cursor);
-    const dayOrders = received.filter((order) => toDateKey(new Date(order.createdAt)) === date);
-    dailyRevenue.push({
-      date,
-      label: cursor.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
-      revenue: dayOrders.reduce((sum, order) => sum + order.total, 0),
-      orders: dayOrders.length,
-    });
-    cursor.setDate(cursor.getDate() + 1);
+  const responseText = await response.text();
+  let payload: unknown = null;
+  if (responseText) {
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      payload = responseText;
+    }
   }
-
-  return {
-    startDate: toDateKey(start),
-    endDate: toDateKey(end),
-    totalOrders: orders.length,
-    revenue: received.reduce((sum, order) => sum + order.total, 0),
-    receivedOrders: received.length,
-    averageOrder: received.length ? received.reduce((sum, order) => sum + order.total, 0) / received.length : 0,
-    statuses: statusesSummary,
-    dailyRevenue,
-    recentOrders: orders.slice(0, 6),
-  };
+  const message = isRecord(payload) && typeof payload.detail === "string"
+    ? payload.detail
+    : isRecord(payload) && typeof payload.message === "string"
+      ? payload.message
+      : typeof payload === "string" && payload
+        ? payload
+        : `A API recusou a alteração (HTTP ${response.status}).`;
+  throw new Error(message);
 }
 
 export const adminDashboardService = {
-  getSummary: fetchMockDashboard,
+  getSummary: fetchDashboard,
+  updateOrderStatus,
 };

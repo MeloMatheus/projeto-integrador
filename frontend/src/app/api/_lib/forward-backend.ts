@@ -1,4 +1,5 @@
-const BACKEND_URL = "https://projeto-integrador-jqoo.onrender.com";
+// const BACKEND_URL = "https://projeto-integrador-jqoo.onrender.com";
+const BACKEND_URL = "http://localhost:8081";
 
 export async function forwardBackendRequest(
   request: Request,

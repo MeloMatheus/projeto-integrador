@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -46,6 +47,7 @@ type ShopContextValue = {
   storageError: string;
   register: (input: Registration) => Promise<void>;
   login: (email: string, password: string) => Promise<ShopUser>;
+  loadAddress: () => Promise<void>;
   resetPassword: (email: string, password: string) => Promise<void>;
   logout: () => void;
   addToCart: (productId: string, quantity: number) => void;
@@ -58,8 +60,11 @@ type ShopContextValue = {
 };
 
 const STORAGE_KEY = "doce-miolo-store-v1";
+const SESSION_TOKEN_KEY = "doce-miolo-session-token-v1";
+const SESSION_USER_ID_KEY = "doce-miolo-session-user-id-v1";
 const ShopContext = createContext<ShopContextValue | null>(null);
 const STORE_EVENT = "doce-miolo-store-change";
+const SESSION_EVENT = "doce-miolo-session-change";
 
 const emptyData: PersistedData = { users: [], sessionId: null, carts: {}, orders: [] };
 const paymentMethods: PaymentMethod[] = ["Dinheiro", "Cartão de débito", "Cartão de crédito"];
@@ -266,12 +271,31 @@ function subscribeToStore(callback: () => void) {
   };
 }
 
+function subscribeToSession(callback: () => void) {
+  window.addEventListener(SESSION_EVENT, callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener(SESSION_EVENT, callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
 function getStoreSnapshot() {
   return localStorage.getItem(STORAGE_KEY);
 }
 
+function getSessionSnapshot() {
+  const token = sessionStorage.getItem(SESSION_TOKEN_KEY);
+  const userId = sessionStorage.getItem(SESSION_USER_ID_KEY);
+  return token && userId ? JSON.stringify({ token, userId }) : "";
+}
+
 function getServerSnapshot() {
   return null;
+}
+
+function getServerSessionSnapshot() {
+  return "";
 }
 
 function getClientReadySnapshot() {
@@ -301,6 +325,7 @@ function parsePersistedData(value: string): PersistedData {
       const account: PersistedShopUser = { ...user };
       delete account.passwordHash;
       delete account.passwordSalt;
+      delete account.token;
       return { ...account, role: account.role ?? "CUSTOMER" };
     }),
     sessionId: parsed.sessionId,
@@ -309,9 +334,25 @@ function parsePersistedData(value: string): PersistedData {
   };
 }
 
+function serializePersistedData(data: PersistedData) {
+  return JSON.stringify({
+    ...data,
+    users: data.users.map((user) => {
+      const persistedUser = { ...user };
+      delete persistedUser.token;
+      return persistedUser;
+    }),
+  });
+}
+
 export function ShopProvider({ children }: { children: ReactNode }) {
   const snapshot = useSyncExternalStore(subscribeToStore, getStoreSnapshot, getServerSnapshot);
   const ready = useSyncExternalStore(subscribeToStore, getClientReadySnapshot, getServerReadySnapshot);
+  const sessionSnapshot = useSyncExternalStore(
+    subscribeToSession,
+    getSessionSnapshot,
+    getServerSessionSnapshot,
+  );
   const [writeError, setWriteError] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -330,7 +371,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 
   const commit = useCallback((next: PersistedData) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      localStorage.setItem(STORAGE_KEY, serializePersistedData(next));
       setWriteError("");
       window.dispatchEvent(new Event(STORE_EVENT));
     } catch (error) {
@@ -377,12 +418,33 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const storageError = writeError || parseError;
-  const currentUser = data.users.find((user) => user.id === data.sessionId) ?? null;
+  const latestData = useRef(data);
+  useEffect(() => {
+    latestData.current = data;
+  }, [data]);
+  const sessionToken = useMemo(() => {
+    if (!sessionSnapshot) return null;
+    const parsed: unknown = JSON.parse(sessionSnapshot);
+    return isRecord(parsed) && typeof parsed.userId === "string" && typeof parsed.token === "string"
+      ? { userId: parsed.userId, token: parsed.token }
+      : null;
+  }, [sessionSnapshot]);
+  const persistedUser = data.users.find((user) => user.id === data.sessionId) ?? null;
+  const currentUser = useMemo(
+    () => persistedUser
+      ? {
+          ...persistedUser,
+          token: sessionToken?.userId === persistedUser.id ? sessionToken.token : undefined,
+        }
+      : null,
+    [persistedUser, sessionToken],
+  );
   const cart = useMemo(
     () => currentUser ? normalizeCartIds(data.carts[currentUser.id] ?? [], products) : [],
     [currentUser, data.carts, products],
   );
   const orders = useMemo(() => currentUser ? data.orders.filter((order) => order.userId === currentUser.id) : [], [currentUser, data.orders]);
+  const addressRequests = useRef(new Set<string>());
 
   const authenticate = useCallback(
     async (email: string, password: string) => {
@@ -400,24 +462,8 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         throw new Error("A API retornou dados de autenticação inválidos.");
       }
 
-      const role = profile.perfil === "ADMIN" ? "ADMIN" : "CUSTOMER";
-      let address: Address | null = null;
-      let addressId: string | null = null;
-      if (role === "CUSTOMER") {
-        const addressesPayload = await backendRequest(
-          `/api/enderecos/${encodeURIComponent(profile.idUsuario)}`,
-          { token },
-        );
-        if (!Array.isArray(addressesPayload)) {
-          throw new Error("A API retornou a lista de endereços em formato inválido.");
-        }
-        const addresses = addressesPayload.map(mapBackendAddress);
-        const savedAddress = addresses.find((item) => item.principal) ?? addresses[0];
-        if (savedAddress) {
-          address = savedAddress.address;
-          addressId = savedAddress.id;
-        }
-      }
+      const normalizedProfile = profile.perfil.trim().toUpperCase().replace(/^ROLE_/, "");
+      const role = ["ADMIN", "ADMINISTRADOR"].includes(normalizedProfile) ? "ADMIN" : "CUSTOMER";
 
       const user: ShopUser = {
         id: profile.idUsuario,
@@ -425,8 +471,8 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         email: profile.email,
         phone: typeof profile.telefone === "string" ? profile.telefone : "",
         role,
-        address,
-        addressId,
+        address: null,
+        addressId: null,
         token,
       };
       const users = data.users.filter((candidate) =>
@@ -438,10 +484,54 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         sessionId: user.id,
         carts: { ...data.carts, [user.id]: data.carts[user.id] ?? [] },
       });
+      try {
+        sessionStorage.setItem(SESSION_USER_ID_KEY, user.id);
+        sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+        window.dispatchEvent(new Event(SESSION_EVENT));
+        setWriteError("");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Não foi possível salvar o token da sessão.";
+        setWriteError(`Não foi possível salvar sua sessão: ${message}`);
+        throw new Error(`Não foi possível salvar sua sessão: ${message}`);
+      }
       return user;
     },
     [commit, data],
   );
+
+  const loadAddress = useCallback(async () => {
+    if (!currentUser || currentUser.role !== "CUSTOMER") return;
+    if (!currentUser.token) throw new Error("Entre novamente para carregar seu endereço.");
+
+    const requestKey = `${currentUser.id}:${currentUser.token}`;
+    if (addressRequests.current.has(requestKey)) return;
+    addressRequests.current.add(requestKey);
+
+    try {
+      const addressesPayload = await backendRequest(
+        `/api/enderecos/${encodeURIComponent(currentUser.id)}`,
+        { token: currentUser.token },
+      );
+      if (!Array.isArray(addressesPayload)) {
+        throw new Error("A API retornou a lista de endereços em formato inválido.");
+      }
+
+      const addresses = addressesPayload.map(mapBackendAddress);
+      const savedAddress = addresses.find((item) => item.principal) ?? addresses[0];
+      const data = latestData.current;
+      const users = data.users.map((user) => user.id === currentUser.id
+        ? {
+            ...user,
+            address: savedAddress?.address ?? null,
+            addressId: savedAddress?.id ?? null,
+          }
+        : user);
+      commit({ ...data, users });
+    } catch (error) {
+      addressRequests.current.delete(requestKey);
+      throw error;
+    }
+  }, [commit, currentUser]);
 
   const register = useCallback(
     async ({ name, email, phone, password }: Registration) => {
@@ -469,14 +559,24 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    let sessionStorageFailure = "";
+    try {
+      sessionStorage.removeItem(SESSION_TOKEN_KEY);
+      sessionStorage.removeItem(SESSION_USER_ID_KEY);
+    } catch (error) {
+      sessionStorageFailure = error instanceof Error
+        ? error.message
+        : "Não foi possível remover o token da sessão.";
+    }
+    window.dispatchEvent(new Event(SESSION_EVENT));
     commit({
       ...data,
-      users: data.users.map((user) =>
-        user.id === currentUser?.id ? { ...user, token: undefined } : user,
-      ),
       sessionId: null,
     });
-  }, [commit, currentUser, data]);
+    if (sessionStorageFailure) {
+      setWriteError(`Não foi possível limpar completamente sua sessão: ${sessionStorageFailure}`);
+    }
+  }, [commit, data]);
 
   const addToCart = useCallback(
     (productId: string, quantity: number) => {
@@ -590,14 +690,17 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       for (const cartItem of backendCart.itens) {
         if (isRecord(cartItem) && typeof cartItem.idProduto === "string" &&
           !desiredProductIds.has(cartItem.idProduto)) {
-          await backendRequest(`/api/carrinho/itens/${encodeURIComponent(cartItem.idProduto)}`, {
-            method: "DELETE",
-            token: currentUser.token,
-          });
+          await backendRequest(
+            `/api/carrinho/${encodeURIComponent(currentUser.id)}/itens/${encodeURIComponent(cartItem.idProduto)}`,
+            {
+              method: "DELETE",
+              token: currentUser.token,
+            },
+          );
         }
       }
       for (const [index, item] of syncedItems.entries()) {
-        await backendRequest("/api/carrinho/itens", {
+        await backendRequest(`/api/carrinho/${encodeURIComponent(currentUser.id)}/itens`, {
           method: "PUT",
           token: currentUser.token,
           body: {
@@ -678,6 +781,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     storageError,
     register,
     login,
+    loadAddress,
     resetPassword,
     logout,
     addToCart,
@@ -688,7 +792,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     createOrder,
     getOrder,
   }), [
-    ready, currentUser, products, catalogLoading, catalogError, refreshCatalog, cart, orders, storageError, register, login, resetPassword, logout,
+    ready, currentUser, products, catalogLoading, catalogError, refreshCatalog, cart, orders, storageError, register, login, loadAddress, resetPassword, logout,
     addToCart, setCartQuantity, removeFromCart, saveProfile, saveAddress, createOrder, getOrder,
   ]);
 

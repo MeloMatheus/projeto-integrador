@@ -41,7 +41,6 @@ import { AdminDashboard } from "@/components/admin/admin-dashboard";
 import { useShop } from "@/lib/shop-store";
 import {
   calculateDelivery,
-  categories,
   formatCep,
   formatCurrency,
   formatPhone,
@@ -122,7 +121,7 @@ function FormField({
 export function ShopApp({ route, orderId = "" }: { route: ShopRoute; orderId?: string }) {
   const router = useRouter();
   const shop = useShop();
-  const { ready, currentUser, cart, storageError } = shop;
+  const { ready, currentUser, cart, storageError, loadAddress } = shop;
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState<"success" | "error">("success");
   const [busy, setBusy] = useState(false);
@@ -144,6 +143,14 @@ export function ShopApp({ route, orderId = "" }: { route: ShopRoute; orderId?: s
   }, [currentUser, ready, route, router]);
 
   const isGuestPage = ["login", "register", "forgot"].includes(route);
+  useEffect(() => {
+    if (!ready || isGuestPage || route === "admin" || currentUser?.role !== "CUSTOMER") return;
+    void loadAddress().catch((error: unknown) => {
+      setNotice(error instanceof Error ? error.message : "Não foi possível carregar seu endereço.");
+      setNoticeKind("error");
+    });
+  }, [currentUser?.id, currentUser?.role, currentUser?.token, isGuestPage, loadAddress, ready, route]);
+
   if (!ready || ((!currentUser?.token && !isGuestPage) || (currentUser?.token && isGuestPage))) {
     return <LoadingScreen />;
   }
@@ -155,7 +162,7 @@ export function ShopApp({ route, orderId = "" }: { route: ShopRoute; orderId?: s
   }
   if (route === "admin") {
     if (currentUser?.role !== "ADMIN") return <LoadingScreen />;
-    return <AdminDashboard userName={currentUser.name} onLogout={shop.logout} />;
+    return <AdminDashboard userName={currentUser.name} token={currentUser.token ?? ""} onLogout={shop.logout} />;
   }
 
   if (route === "login" || route === "register" || route === "forgot") {
@@ -332,7 +339,6 @@ function passwordInput(
 function Storefront({ notify }: { notify: (message: string, kind?: "success" | "error") => void }) {
   const { addToCart, currentUser, products, catalogLoading, catalogError, refreshCatalog } = useShop();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("Todos");
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -346,9 +352,8 @@ function Storefront({ notify }: { notify: (message: string, kind?: "success" | "
     return () => window.removeEventListener("keydown", focusSearch);
   }, []);
   const filtered = useMemo(() => products.filter((product) => (
-    (category === "Todos" || product.category === category) &&
     `${product.name} ${product.description}`.toLowerCase().includes(search.toLowerCase().trim())
-  )), [category, products, search]);
+  )), [products, search]);
 
   return (
     <>
@@ -374,7 +379,6 @@ function Storefront({ notify }: { notify: (message: string, kind?: "success" | "
         <div className="section-heading"><div><span className="eyebrow">ESCOLHIDOS A DEDO</span><h2>Um miolo de felicidade</h2><p>Pequenos no tamanho, gigantes no sabor.</p></div><span className="catalog-count"><CakeSlice size={16} /> {products.filter((product) => product.available).length} disponíveis</span></div>
         <div className="catalog-tools">
           <div className="search-box"><Search size={18} /><Input ref={searchRef} aria-label="Buscar cupcakes" placeholder="Qual sabor combina com hoje?" value={search} onChange={(event) => setSearch(event.target.value)} /><kbd>Ctrl K</kbd></div>
-          <div className="category-list" aria-label="Filtrar por categoria">{categories.map((item) => <button key={item} className={`category-chip ${category === item ? "active" : ""}`} onClick={() => setCategory(item)} aria-pressed={category === item}>{item}</button>)}</div>
         </div>
         {catalogLoading ? <p className="catalog-status" role="status">Carregando os produtos disponíveis...</p>
           : catalogError ? <div className="empty-search" role="alert"><h3>Não foi possível carregar o cardápio</h3><p>{catalogError}</p><Button variant="outline" onClick={() => void refreshCatalog()}>Tentar novamente</Button></div>
@@ -388,7 +392,7 @@ function Storefront({ notify }: { notify: (message: string, kind?: "success" | "
             }
           }} />
         ))}</div> : products.length === 0 ? <div className="empty-search"><CakeSlice size={27} /><h3>Nenhum produto cadastrado</h3><p>Volte mais tarde para conferir as novidades do cardápio.</p></div>
-          : <div className="empty-search"><Search size={27} /><h3>Não encontramos esse sabor</h3><p>Tente outra palavra ou escolha uma categoria diferente.</p><Button variant="outline" onClick={() => { setSearch(""); setCategory("Todos"); }}>Ver todos os cupcakes</Button></div>}
+          : <div className="empty-search"><Search size={27} /><h3>Não encontramos esse sabor</h3><p>Tente outra palavra ou limpe a busca para ver o cardápio completo.</p><Button variant="outline" onClick={() => setSearch("")}>Ver todos os cupcakes</Button></div>}
       </section>
 
       <section className="feature-banner" id="sobre">
